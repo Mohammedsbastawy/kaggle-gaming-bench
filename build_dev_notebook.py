@@ -15,6 +15,7 @@ legendary_gui_code = (root / 'legendary_gui.py').read_text(encoding='utf-8')
 auto_optimize_code = (root / 'auto_optimize.py').read_text(encoding='utf-8')
 setup_sh_code = (root / 'setup.sh').read_text(encoding='utf-8')
 gpu_runtime_code = (root / 'gpu_runtime.py').read_text(encoding='utf-8')
+bench_runtime_code = (root / 'bench_runtime.py').read_text(encoding='utf-8')
 gpu_xorg_code = (root / 'gpu_xorg.sh').read_text(encoding='utf-8')
 probe_nvidia_userspace_code = (root / 'probe_nvidia_userspace.sh').read_text(encoding='utf-8')
 start_desktop_code = (root / 'start_desktop.sh').read_text(encoding='utf-8')
@@ -297,6 +298,7 @@ fix_heroic_sh = {repr(fix_heroic_sh_code)}
 (BENCH / 'legendary_menu.sh').write_text({repr(legendary_menu_code)}, encoding='utf-8')
 (BENCH / 'legendary_gui.py').write_text({repr(legendary_gui_code)}, encoding='utf-8')
 (BENCH / 'gpu_runtime.py').write_text({repr(gpu_runtime_code)}, encoding='utf-8')
+(BENCH / 'bench_runtime.py').write_text({repr(bench_runtime_code)}, encoding='utf-8')
 (BENCH / 'gpu_xorg.sh').write_text({repr(gpu_xorg_code)}, encoding='utf-8')
 (BENCH / 'probe_nvidia_userspace.sh').write_text({repr(probe_nvidia_userspace_code)}, encoding='utf-8')
 
@@ -391,9 +393,15 @@ if pidfile.exists():
 
 env = os.environ.copy()
 env['PATH'] = f"/usr/local/bin:/usr/games:/usr/bin:{env.get('PATH', '')}"
+queue_size = os.environ.get('GAMELAB_WS_QUEUE', '12')
+if not queue_size.isdigit() or not 1 <= int(queue_size) <= 120:
+    raise ValueError('GAMELAB_WS_QUEUE must be an integer from 1 to 120')
 env.update(SELKIES_ENABLE_HTTPS='false', SELKIES_MODE='websockets',
            SELKIES_ALLOWED_ORIGINS='https://kkb-production.jupyter-proxy.kaggle.net',
            SELKIES_ENCODER='h264enc', SELKIES_FRAMERATE='60,30-60',
+           SELKIES_VIDEO_FULLCOLOR='false|locked',
+           SELKIES_VIDEO_10BIT='false|locked',
+           SELKIES_BACKPRESSURE_QUEUE_SIZE=queue_size,
            SELKIES_VIDEO_BITRATE='8000,2000-15000',
            SELKIES_RATE_CONTROL_MODE='cbr', SELKIES_ENABLE_RESIZE='true',
            SELKIES_AUDIO_ENABLED='true', SELKIES_AUDIO_CHANNELS='2',
@@ -592,6 +600,14 @@ def epic_installed_apps():
     except (OSError, ValueError):
         return []
 
+try:
+    gpu_facts = json.loads(subprocess.run(
+        [sys.executable, str(BENCH / 'gpu_runtime.py'), 'diagnose'],
+        capture_output=True, text=True, timeout=50, env=probe_env,
+        check=True).stdout)
+except (OSError, ValueError, subprocess.SubprocessError):
+    gpu_facts = {}
+
 report = {
     'health': health,
     'status': status,
@@ -636,14 +652,16 @@ report = {
     },
     'compatibility_matrix': {
         'native_linux_2d_and_cpu_games': 'Fully supported (Mesa llvmpipe software rasterizer)',
-        'native_linux_opengl_games': 'Supported via software rasterization (no hardware NVIDIA GLX scanout)',
-        'native_vulkan_and_dxvk_games': 'UNAVAILABLE (datacenter Tesla T4 lacks container display/render nodes and ICD)',
-        'windows_games_under_wine_proton': 'Supported ONLY with WineD3D (OpenGL translation); DXVK fails due to missing Vulkan',
+        'native_linux_opengl_games': 'NVIDIA OpenGL through VirtualGL' if gpu_facts.get('virtualgl') else 'OpenGL renderer requires live verification',
+        'native_vulkan_and_dxvk_games': 'Vulkan X11 presentation verified' if gpu_facts.get('vulkan_window') else 'Vulkan X11 presentation unavailable in this session',
+        'windows_games_under_wine_proton': 'DXVK and WineD3D available' if gpu_facts.get('vulkan_window') else 'WineD3D on NVIDIA OpenGL' if gpu_facts.get('virtualgl') else 'Graphics backend requires live verification',
         'epic_games_support': 'Heroic and Legendary installed; individual game launch needs authenticated interactive testing',
         'controller_support': '4 Xbox 360 userspace virtual gamepads via interposer',
         'audio_support': 'PulseAudio stereo monitor -> Selkies Opus 128 kbps',
-        'video_support': 'Tesla T4 NVENC hardware H.264 encode at 60 FPS'
-    }
+        'video_support': 'Tesla T4 NVENC hardware H.264 4:2:0 encode at 60 FPS'
+    },
+    'gpu_runtime': gpu_facts,
+    'stream_config': {'codec': 'H.264 4:2:0 8-bit', 'websocket_queue': os.environ.get('GAMELAB_WS_QUEUE', '12')}
 }
 
 try:

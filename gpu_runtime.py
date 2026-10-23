@@ -262,6 +262,28 @@ def configure_mouse(wine_bin, env):
             pass
 
 
+def select_graphics_backend(facts, preference="auto"):
+    """Select only paths whose required presentation probe succeeded."""
+    if preference not in ("auto", "dxvk", "wined3d"):
+        raise ValueError("GAMELAB_GRAPHICS_BACKEND must be auto, dxvk, or wined3d")
+    dxvk_ready = (facts["vulkan_window"] and facts["vulkan_32bit_loader"]
+                  and facts["dxvk_files"])
+    gl_ready = facts["nvidia_32bit_gl"]
+    if preference == "dxvk":
+        if not dxvk_ready:
+            raise RuntimeError("DXVK requires a working Vulkan X11 swapchain, 32-bit loader, and both DLL sets")
+        return "dxvk"
+    if preference == "auto" and dxvk_ready:
+        return "dxvk"
+    if facts["direct_gl"] and gl_ready:
+        return "direct_gl"
+    if facts["virtualgl"] and gl_ready:
+        return "virtualgl"
+    if preference == "wined3d":
+        raise RuntimeError("WineD3D requires verified NVIDIA GL and 32-bit GL libraries")
+    return "software"
+
+
 def launch(app, wine):
     facts = diagnose()
     env = clean_env()
@@ -294,8 +316,13 @@ def launch(app, wine):
     command = [wine_bin, str(shipping)] if shipping and wine_bin else ["legendary", "launch", app, "--wine", wine]
     if shipping:
         print(f"Unreal Engine Shipping binary: {shipping}", flush=True)
-    if (facts["vulkan_window"] and facts["nvidia_32bit_gl"]
-            and facts["vulkan_32bit_loader"] and facts["dxvk_files"]):
+    try:
+        selected = select_graphics_backend(
+            facts, os.environ.get("GAMELAB_GRAPHICS_BACKEND", "auto"))
+    except (ValueError, RuntimeError) as exc:
+        print(f"Graphics backend unavailable: {exc}", file=sys.stderr)
+        return 78
+    if selected == "dxvk":
         try:
             install_dxvk(env["WINEPREFIX"])
         except (OSError, RuntimeError) as exc:
@@ -304,16 +331,21 @@ def launch(app, wine):
         env["WINEDLLOVERRIDES"] = "d3d11,dxgi,d3d9,d3d10core=n,b;mscoree,mshtml=d"
         env["DXVK_HUD"] = "devinfo,fps"
         backend = "NVIDIA Vulkan through DXVK"
-        if facts["virtualgl"]:
-            vgl = shutil.which("vglrun") or "/opt/VirtualGL/bin/vglrun"
-            command = ([vgl, "-d", facts["virtualgl_display"], *command] if shipping else
-                       ["legendary", "launch", app, "--wine", wine,
-                        "--wrapper", f"{vgl} -d {facts['virtualgl_display']}"])
-    elif facts["direct_gl"] and facts["nvidia_32bit_gl"]:
+    elif selected == "direct_gl":
         backend = "NVIDIA OpenGL"
-    elif facts["virtualgl"] or facts["egl_device"]:
-        display = facts.get("virtualgl_display") or facts.get("egl_device_display") or "egl0"
+    elif selected == "virtualgl":
+        display = facts["virtualgl_display"]
         backend = f"NVIDIA OpenGL through VirtualGL ({display})"
+        env.update(VGL_READBACK="pbo", VGL_SPOIL="1", VGL_SYNC="0",
+                   VGL_COMPRESS="proxy")
+        vgl_fps = os.environ.get("GAMELAB_VGL_FPS", "60")
+        try:
+            if not 0 <= float(vgl_fps) <= 240:
+                raise ValueError
+        except ValueError:
+            print("GAMELAB_VGL_FPS must be between 0 and 240", file=sys.stderr)
+            return 78
+        env["VGL_FPS"] = vgl_fps
         vgl = shutil.which("vglrun") or "/opt/VirtualGL/bin/vglrun"
         command = ([vgl, "-d", display, *command] if shipping else
                    ["legendary", "launch", app, "--wine", wine,

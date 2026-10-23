@@ -71,6 +71,23 @@ class RuntimeTests(unittest.TestCase):
         configured = [entry.args[0][9] for entry in run.call_args_list]
         self.assertEqual(configured, ["disable", "0", "0", "0", "5"])
 
+    def test_backend_requires_vulkan_window_before_dxvk(self):
+        facts = dict(vulkan_window=False, vulkan_32bit_loader=True,
+                     dxvk_files=True, nvidia_32bit_gl=True,
+                     direct_gl=False, virtualgl=True)
+        self.assertEqual(gpu_runtime.select_graphics_backend(facts), "virtualgl")
+        with self.assertRaises(RuntimeError):
+            gpu_runtime.select_graphics_backend(facts, "dxvk")
+        facts["vulkan_window"] = True
+        self.assertEqual(gpu_runtime.select_graphics_backend(facts), "dxvk")
+        self.assertEqual(gpu_runtime.select_graphics_backend(facts, "wined3d"), "virtualgl")
+
+    def test_egl_device_alone_is_not_virtualgl_proof(self):
+        facts = dict(vulkan_window=False, vulkan_32bit_loader=False,
+                     dxvk_files=False, nvidia_32bit_gl=True,
+                     direct_gl=False, virtualgl=False, egl_device=True)
+        self.assertEqual(gpu_runtime.select_graphics_backend(facts), "software")
+
 
 if __name__ == "__main__":
     unittest.main()

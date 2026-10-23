@@ -70,6 +70,7 @@ Then start the Selkies session using the provided starter.
 * **NVENC 60 FPS Streaming**: Tesla T4 hardware encoder captures Xvfb at 1280×720 @ 60 FPS over WebSockets.
 * **Desktop 3D Graphics**: Live testing verified NVIDIA offscreen OpenGL through `/opt/VirtualGL/bin/vglrun -d egl0`. The dashboard probes this path before each Epic game launch and keeps the Xvfb desktop as the Selkies capture surface.
 * **Compatibility**: Vulkan and DXVK remain capability-gated. Games use the verified OpenGL/Wine path when Vulkan presentation is unavailable. `GAMELAB_ALLOW_SOFTWARE=1` remains an explicit fallback for lightweight titles.
+* **Controller Support**: 4 virtual Xbox 360 controllers enumerated via Selkies input interposer without `/dev/uinput`.
 
 See [GPU deployment](GPU_DEPLOYMENT.md) for the probe ladder and portable GPU host requirements.
 See [community 3D research](COMMUNITY_3D_RESEARCH.md) for the isolated matching-driver injection experiment and the evidence behind it.
@@ -97,5 +98,18 @@ vulkaninfo --summary                     # deviceName must be NVIDIA Tesla T4
 nvidia-smi dmon -s u                     # inspect 3D/graphics utilization during a game
 ```
 
-`direct_gl` or `virtualgl` must be true for GPU WineD3D. `egl_device` checks NVIDIA's display-independent EGL path separately. `vulkan_window`, `vulkan_32bit_loader`, and `dxvk_files` must all be true for DXVK. `nvidia_32bit_gl` must be true for 32-bit games. NVENC activity and a 60 FPS stream alone do not establish game frame rate or GPU rasterization. Missing `/dev/nvidia-modeset` blocks the Xorg path, but does not alone rule out EGL device rendering. `__NV_PRIME_RENDER_OFFLOAD`, `__GLX_VENDOR_LIBRARY_NAME`, `LD_PRELOAD`, and a hand-written `nvidia_icd.json` cannot supply driver libraries or device access that the host withheld.
-* **Controller Support**: 4 virtual Xbox 360 controllers enumerated via Selkies input interposer without `/dev/uinput`.
+`direct_gl` or `virtualgl` must be true for GPU WineD3D. `egl_device` checks NVIDIA's display-independent EGL path separately; it alone does not prove that VirtualGL can present into Xvfb. `vulkan_window`, `vulkan_32bit_loader`, and `dxvk_files` must all be true for DXVK. `nvidia_32bit_gl` must be true for 32-bit WineD3D games. NVENC activity and a 60 FPS stream alone do not establish game frame rate or GPU rasterization. Missing `/dev/nvidia-modeset` blocks the Xorg path, but does not alone rule out EGL device rendering. `__NV_PRIME_RENDER_OFFLOAD`, `__GLX_VENDOR_LIBRARY_NAME`, `LD_PRELOAD`, and a hand-written `nvidia_icd.json` cannot supply driver libraries or device access that the host withheld.
+
+### Low-latency profile and live comparison
+
+The notebook locks Selkies H.264 to 8-bit 4:2:0, which can use the browser's ordinary hardware decoder. WebSocket backpressure is bounded to 12 frames/chunks by default; `GAMELAB_WS_QUEUE` accepts 1–120 for a controlled comparison. VirtualGL uses PBO readback, frame spoiling, asynchronous rendering, local X11 proxy transport, and a 60 FPS transport limit. `GAMELAB_VGL_FPS=0` removes that limit for a comparison. These settings reduce avoidable buffering; the Xvfb/XShm readback and copy path remains until Kaggle exposes a GPU-backed capture device.
+
+Use `GAMELAB_GRAPHICS_BACKEND=auto` (default), `wined3d`, or `dxvk` before launching a game. `dxvk` exits with a clear error unless Vulkan X11 presentation and both DXVK bitnesses pass the runtime probe. VirtualGL wraps the OpenGL WineD3D path only; DXVK is not run through its GLX interposer. The setting is inherited by the Legendary launcher. Restart the Selkies notebook cell after changing `GAMELAB_WS_QUEUE`; restart the game after changing the graphics backend or `GAMELAB_VGL_FPS`.
+
+During the same repeatable gameplay segment for each candidate, run:
+
+```bash
+python3 /tmp/kaggle-game-dev-bench/bench_runtime.py --label blood-west-wined3d --seconds 30 --output /kaggle/working/blood-west-wined3d.json
+```
+
+Record actual **in-game FPS**, frame-time spikes, and browser HUD input latency alongside the JSON report. The sampler records cgroup CPU consumption/throttling and per-GPU render/encoder activity. Stream FPS measures delivery, not game FPS. Compare at identical scene, resolution, and graphics settings; favor stable game frame times and low input latency over GPU utilization percentage alone.
