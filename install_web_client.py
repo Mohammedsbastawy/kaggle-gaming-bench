@@ -26,6 +26,8 @@ def _source_root() -> Path:
 
 def install() -> Path:
     """Copy the installed client, add branded assets, and return its web root."""
+    import re, time
+    v = int(time.time())
     source = _source_root()
     shutil.copytree(source, WEB_ROOT, dirs_exist_ok=True)
     shutil.copy2(ASSETS / "hud.css", WEB_ROOT / "7bz-hud.css")
@@ -33,10 +35,13 @@ def install() -> Path:
     index = WEB_ROOT / "index.html"
     text = index.read_text(encoding="utf-8")
     if MARKER not in text:
-        head = f'<!-- {MARKER} -->\n<link rel="stylesheet" href="7bz-hud.css">\n'
-        script = '<script defer src="7bz-hud.js"></script>\n'
+        head = f'<!-- {MARKER} -->\n<link rel="stylesheet" href="7bz-hud.css?v={v}">\n'
+        script = f'<script defer src="7bz-hud.js?v={v}"></script>\n'
         text = text.replace("</head>", head + "</head>")
         text = text.replace("</body>", script + "</body>")
+    else:
+        text = re.sub(r'7bz-hud\.css(\?v=\d+)?', f'7bz-hud.css?v={v}', text)
+        text = re.sub(r'7bz-hud\.js(\?v=\d+)?', f'7bz-hud.js?v={v}', text)
     text = text.replace("<title>Selkies</title>", "<title>7BZ Dev Cloud Game</title>")
     index.write_text(text, encoding="utf-8")
     return WEB_ROOT
