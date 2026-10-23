@@ -145,6 +145,16 @@ fi
 # 13. Pre-configure Heroic default settings: disable DXVK/VKD3D/Esync/Fsync
 python3 "$BENCH/fix_heroic_config.py" || true
 
+# 14. Pre-initialize clean 64-bit Wine prefix with Wine-GE (prevents kernel32.dll not found and popup dialogs)
+if [ -x "$WINE_GE_DIR/Wine-GE-Proton8-26/bin/wineboot" ]; then
+    echo "▶ Initializing clean default Wine prefix (/home/gamer/.wine)..."
+    export WINEPREFIX="/home/gamer/.wine"
+    export WINEARCH=win64
+    export WINEDLLOVERRIDES="mscoree,mshtml=d"
+    runuser -u gamer -- env WINEPREFIX="/home/gamer/.wine" WINEARCH=win64 WINEDLLOVERRIDES="mscoree,mshtml=d" \
+        "$WINE_GE_DIR/Wine-GE-Proton8-26/bin/wineboot" --init 2>/dev/null || true
+fi
+
 # 14. Inject keyboard lock into Selkies HTML (prevents Esc from exiting browser fullscreen)
 python3 -c "
 import sys; sys.path.insert(0, '$BENCH')

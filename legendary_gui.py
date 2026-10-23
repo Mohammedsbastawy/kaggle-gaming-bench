@@ -413,10 +413,25 @@ class LegendaryApp(tk.Tk):
 
     def _launch_worker(self, app_name, title, runner):
         env = dict(os.environ)
-        env["WINEDLLOVERRIDES"] = "d3d11,dxgi,d3d9,d3d10core=b"
+        env["WINEDLLOVERRIDES"] = "d3d11,dxgi,d3d9,d3d10core=b;mscoree,mshtml=d"
         env["DISPLAY"] = os.environ.get("DISPLAY", ":0")
         env["SDL_AUDIODRIVER"] = "pulse"
         env["HOME"] = "/home/gamer"
+        env["WINEPREFIX"] = str(HOME / ".wine")
+
+        # Automatically verify and heal Wine prefix before launch if kernel32.dll is missing
+        kernel32 = HOME / ".wine/drive_c/windows/system32/kernel32.dll"
+        if not kernel32.is_file():
+            self.log("▶ Detected incomplete or uninitialized Wine prefix. Auto-initializing with Wine-GE...")
+            wineboot_bin = Path(runner).with_name("wineboot")
+            if wineboot_bin.is_file():
+                try:
+                    init_env = dict(env)
+                    init_env["WINEDLLOVERRIDES"] = "mscoree,mshtml=d"
+                    subprocess.run([str(wineboot_bin), "--init"], env=init_env, check=False, timeout=30)
+                    self.log("✓ Wine prefix auto-initialized successfully.")
+                except Exception as wb_err:
+                    self.log(f"Notice auto-initializing prefix: {wb_err}")
 
         # Source auto-optimizer Wine settings if available
         wine_env = HOME / '.config/gamelab_wine_env.sh'

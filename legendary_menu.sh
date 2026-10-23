@@ -67,7 +67,18 @@ while true; do
                     echo "Error: No Wine runner found on system!"
                 else
                     echo "Launching $appname via WineD3D using runner: $WINE_BIN"
-                    export WINEDLLOVERRIDES="d3d11,dxgi,d3d9,d3d10core=b"
+                    export WINEDLLOVERRIDES="d3d11,dxgi,d3d9,d3d10core=b;mscoree,mshtml=d"
+                    export WINEPREFIX="/home/gamer/.wine"
+                    
+                    # Auto-heal prefix if kernel32.dll is missing
+                    if [ ! -f "$WINEPREFIX/drive_c/windows/system32/kernel32.dll" ]; then
+                        echo "Initializing Wine prefix with Wine-GE..."
+                        WINEBOOT_BIN="$(dirname "$WINE_BIN")/wineboot"
+                        if [ -x "$WINEBOOT_BIN" ]; then
+                            WINEDLLOVERRIDES="mscoree,mshtml=d" "$WINEBOOT_BIN" --init 2>/dev/null || true
+                        fi
+                    fi
+                    
                     legendary launch "$appname" --wine "$WINE_BIN" 2>&1 | tee -a /home/gamer/logs/legendary-game.log
                     echo "Legendary exit status: ${PIPESTATUS[0]}" | tee -a /home/gamer/logs/legendary-game.log
                 fi
