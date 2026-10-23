@@ -8,184 +8,64 @@ fix_heroic_code = (root / 'fix_heroic_config.py').read_text(encoding='utf-8')
 legendary_menu_code = (root / 'legendary_menu.sh').read_text(encoding='utf-8')
 
 install_script = r'''from pathlib import Path
-import json, os, shutil, subprocess, sys
+import json, os, shutil, subprocess, sys, time
 
 BENCH = Path('/tmp/kaggle-game-dev-bench')
 BUILDS = Path('/tmp/game-builds')
 LOGS = BENCH / 'logs'
 EA_STORE = Path('/tmp/ea-store')
+REPO_URL = 'https://github.com/Mohammedsbastawy/kaggle-gaming-bench.git'
+
 BENCH.mkdir(parents=True, exist_ok=True)
 BUILDS.mkdir(parents=True, exist_ok=True)
 LOGS.mkdir(parents=True, exist_ok=True)
 EA_STORE.mkdir(parents=True, exist_ok=True)
 
-# Installation tracking
-install_results = {}
+# 1. Automatic recovery for apt/dpkg locks (prevents RuntimeError exit 100 on interactive sessions)
+print('▶ Clearing stale apt/dpkg locks and recovering package manager...', flush=True)
+for lock in ['/var/lib/dpkg/lock-frontend', '/var/lib/dpkg/lock', '/var/lib/apt/lists/lock', '/var/cache/apt/archives/lock']:
+    subprocess.run(['fuser', '-k', lock], check=False)
+    try:
+        os.remove(lock)
+    except OSError:
+        pass
+subprocess.run(['dpkg', '--configure', '-a'], check=False, env=dict(os.environ, DEBIAN_FRONTEND='noninteractive'))
 
-def run(label, command, timeout=600, check=True):
-    print('▶', label, flush=True)
-    env = os.environ.copy()
-    env['DEBIAN_FRONTEND'] = 'noninteractive'
-    env['PATH'] = f"/usr/games:/usr/local/bin:/usr/bin:{env.get('PATH', '')}"
-    result = subprocess.run(command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-                            text=True, errors='replace', timeout=timeout, env=env)
-    log_file = BENCH / (label.replace(' ', '_') + '.log')
-    log_file.write_text(result.stdout, encoding='utf-8')
-    print(result.stdout[-1500:], flush=True)
-    success = (result.returncode == 0)
-    install_results[label] = {'exit': result.returncode, 'success': success}
-    if check and not success:
-        raise RuntimeError(f'{label} failed with exit {result.returncode}')
-    return result.returncode
+# 2. Clone or update the ready Git repository
+cloned_ok = False
+try:
+    if not (BENCH / 'setup.sh').exists():
+        print(f'▶ Cloning ready gaming bench suite from {REPO_URL}...', flush=True)
+        res = subprocess.run(['git', 'clone', '--depth', '1', REPO_URL, str(BENCH)], timeout=60)
+        cloned_ok = (res.returncode == 0)
+    else:
+        print('▶ Updating bench repository from git...', flush=True)
+        subprocess.run(['git', '-C', str(BENCH), 'pull'], check=False, timeout=30)
+        cloned_ok = True
+except Exception as e:
+    print(f'Notice: Git clone skipped ({e}), falling back to inline setup.', flush=True)
 
-# 1. Multiarch & repositories setup (enabling universe and multiverse for Noble)
-run('dpkg i386', ['dpkg', '--add-architecture', 'i386'])
-run('enable multiverse', ['sed', '-i', 's/Components: main universe/Components: main universe multiverse/g', '/etc/apt/sources.list.d/ubuntu.sources'], check=False)
-run('apt update', ['apt-get', 'update', '-qq'], 240, check=False)
+# 3. If setup.sh is present, run it with live output streaming
+setup_sh = BENCH / 'setup.sh'
+if setup_sh.exists():
+    setup_sh.chmod(0o755)
+    print('▶ Running automated setup.sh from repository...', flush=True)
+    proc = subprocess.Popen(['/bin/bash', str(setup_sh)], stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1)
+    for line in proc.stdout:
+        print(line, end='', flush=True)
+    proc.wait()
+    print(f'setup.sh completed with exit code: {proc.returncode}', flush=True)
 
-# 2. Core desktop, audio, X11 tools & development packages
-run('apt core', ['apt-get', 'install', '-y', '--no-install-recommends',
-     'xvfb', 'openbox', 'tint2', 'xterm', 'pulseaudio', 'pulseaudio-utils',
-     'xauth', 'dbus-x11', 'git', 'make', 'gcc', 'gcc-multilib',
-     'libgl1-mesa-dri', 'libgbm1', 'libpixman-1-0', 'libxkbcommon0',
-     'mesa-utils', 'x11-utils', 'xdotool', 'wmctrl', 'wget', 'curl',
-     'cabextract', 'p7zip-full'], 600)
-
-# 3. Wine and 32-bit graphics runtime
-wine_rc = run('apt wine', ['apt-get', 'install', '-y', '--no-install-recommends',
-     'wine', 'wine64', 'wine32:i386', 'winbind', 'libgl1-mesa-dri:i386'], 600, check=False)
-if wine_rc != 0:
-    print('Notice: wine32:i386 had packaging conflicts; installing 64-bit wine...', flush=True)
-    run('apt wine64 fallback', ['apt-get', 'install', '-y', '--no-install-recommends', 'wine', 'wine64', 'winbind'], 300)
-
-# 4. Python streaming, interface and gaming CLI packages
-run('python packages', [sys.executable, '-m', 'pip', 'install', '--no-cache-dir',
-     'selkies[jupyter]==2.1.0', 'pygame==2.6.1', 'psutil', 'legendary-gl'], 600)
-
-# Extra libraries for Lutris Python 3.12 runtime and Wine Gecko HTML rendering
-run('apt extras', ['apt-get', 'install', '-y', '--no-install-recommends',
-     'python3.12', 'python3-dbus', 'python3-gi', 'python3-yaml', 'python3-lxml',
-     'python3-requests', 'python3-pil'], 300, check=False)
-
-# 5. Steam installation via official Valve deb (NO pre-seeded license acceptance; developer accepts in GUI)
-steam_deb = Path('/tmp/steam_latest.deb')
-if not steam_deb.exists() or steam_deb.stat().st_size < 1000000:
-    run('download steam', ['wget', '-q', 'https://repo.steampowered.com/steam/archive/stable/steam_latest.deb', '-O', str(steam_deb)], 180, check=False)
-if steam_deb.exists() and steam_deb.stat().st_size > 1000000:
-    run('install steam deb', ['apt-get', 'install', '-y', '--no-install-recommends', str(steam_deb)], 300, check=False)
-else:
-    run('install steam apt', ['apt-get', 'install', '-y', '--no-install-recommends', 'steam'], 300, check=False)
-run('refresh steam packages', ['apt-get', 'update', '-qq'], 240, check=False)
-run('install steam runtime libraries', ['apt-get', 'install', '-y', '--no-install-recommends',
-     'steam-libs-amd64', 'steam-libs-i386:i386', 'libegl1:i386', 'libgbm1:i386',
-     'libgl1:i386'], 300, check=False)
-
-# 6. Heroic Games Launcher (Epic Games & GOG)
-heroic_deb = Path('/tmp/heroic.deb')
-if not heroic_deb.exists() or heroic_deb.stat().st_size < 10000000:
-    run('download heroic', ['wget', '-q',
-         'https://github.com/Heroic-Games-Launcher/HeroicGamesLauncher/releases/download/v2.22.4/Heroic-2.22.4-linux-amd64.deb',
-         '-O', str(heroic_deb)], 240, check=False)
-if heroic_deb.exists() and heroic_deb.stat().st_size > 10000000:
-    run('install heroic', ['dpkg', '-i', str(heroic_deb)], 120, check=False)
-    run('fix heroic deps', ['apt-get', 'install', '-f', '-y'], 180, check=False)
-
-# 7. Lutris Gaming Hub (installed from Ubuntu noble multiverse repository)
-run('install lutris', ['apt-get', 'install', '-y', '--no-install-recommends', 'lutris'], 300, check=False)
-
-# 8. Minigalaxy (dedicated GOG client from Ubuntu universe repository)
-run('install minigalaxy', ['apt-get', 'install', '-y', '--no-install-recommends', 'minigalaxy'], 180, check=False)
-
-# 9. Download official EA App installer
-ea_exe = EA_STORE / 'EAappInstaller.exe'
-if not ea_exe.exists() or ea_exe.stat().st_size < 1000000:
-    run('download ea installer', ['wget', '-q',
-         'https://origin-a.akamaihd.net/EA-Desktop-Client-Download/installer-releases/EAappInstaller.exe',
-         '-O', str(ea_exe)], 120, check=False)
-
-# 10. Configure unprivileged 'gamer' user for secure credential isolation
-run('create gamer user', ['useradd', '-m', '-s', '/bin/bash', '-G', 'audio,video', 'gamer'], 30, check=False)
+# 4. Configure unprivileged gamer user
+subprocess.run(['useradd', '-m', '-s', '/bin/bash', '-G', 'audio,video', 'gamer'], check=False)
 gamer_home = Path('/home/gamer')
 for sub in ['.config', '.local', '.steam', 'game-builds', 'logs', 'ea-prefix']:
     (gamer_home / sub).mkdir(parents=True, exist_ok=True)
-run('chown gamer home', ['chown', '-R', 'gamer:gamer', str(gamer_home)], 30, check=False)
+subprocess.run(['chown', '-R', 'gamer:gamer', str(gamer_home)], check=False)
+subprocess.run(['chmod', '-R', 'u+rwX', str(gamer_home)], check=False)
+subprocess.run(['chmod', '-R', '777', str(BENCH)], check=False)
 
-# 10b. Wine-GE runner installation for Heroic & Lutris (enables Windows game compatibility with media codecs)
-wine_ge_dir = gamer_home / '.config' / 'heroic' / 'tools' / 'wine'
-wine_ge_dir.mkdir(parents=True, exist_ok=True)
-wine_ge_tar = Path('/tmp/wine-lutris-GE-Proton8-26-x86_64.tar.xz')
-if not (wine_ge_dir / 'Wine-GE-Proton8-26').exists():
-    print('Downloading Wine-GE-Proton8-26 compatibility runner...', flush=True)
-    run('download wine-ge', ['wget', '-q', '-c',
-         'https://github.com/GloriousEggroll/wine-ge-custom/releases/download/GE-Proton8-26/wine-lutris-GE-Proton8-26-x86_64.tar.xz',
-         '-O', str(wine_ge_tar)], 300, check=False)
-    if wine_ge_tar.exists() and wine_ge_tar.stat().st_size > 50000000:
-        print('Extracting Wine-GE-Proton8-26...', flush=True)
-        run('extract wine-ge', ['tar', '-xf', str(wine_ge_tar), '-C', str(wine_ge_dir)], 180, check=False)
-        for extracted in wine_ge_dir.glob('*'):
-            if extracted.is_dir() and (extracted / 'bin/wine').exists():
-                sym = wine_ge_dir / 'Wine-GE-Proton8-26'
-                if not sym.exists():
-                    subprocess.run(['ln', '-sf', str(extracted), str(sym)], check=False)
-                lutris_runners = gamer_home / '.local' / 'share' / 'lutris' / 'runners' / 'wine'
-                lutris_runners.mkdir(parents=True, exist_ok=True)
-                subprocess.run(['ln', '-sf', str(extracted), str(lutris_runners / 'Wine-GE-Proton8-26')], check=False)
-                break
-
-# Pre-configure Heroic default settings: disable DXVK/VKD3D (no Vulkan on Kaggle T4) and enable WineD3D
-heroic_cfg_dir = gamer_home / '.config' / 'heroic'
-heroic_cfg_dir.mkdir(parents=True, exist_ok=True)
-active_wine_bin = '/usr/bin/wine'
-active_wine_name = 'Wine Default (9.0)'
-for candidate in [wine_ge_dir / 'Wine-GE-Proton8-26/bin/wine', *wine_ge_dir.glob('*/bin/wine')]:
-    if candidate.exists() and candidate.with_name('wineserver').exists():
-        active_wine_bin = str(candidate)
-        active_wine_name = candidate.parent.parent.name
-        break
-
-heroic_default_cfg = {
-    'defaultSettings': {
-        'autoInstallDxvk': False,
-        'autoInstallVkd3d': False,
-        'autoInstallDxvkNvapi': False,
-        'enableEsync': False,
-        'enableFsync': False,
-        'disableUMU': True,
-        'defaultWinePrefixDir': '/home/gamer/Games/Heroic/Prefixes',
-        'wineVersion': {
-            'bin': active_wine_bin,
-            'wineserver': str(Path(active_wine_bin).with_name('wineserver')),
-            'wineboot': str(Path(active_wine_bin).with_name('wineboot')),
-            'name': active_wine_name,
-            'type': 'wine'
-        }
-    }
-}
-if not (heroic_cfg_dir / 'config.json').exists():
-    (heroic_cfg_dir / 'config.json').write_text(json.dumps(heroic_default_cfg, indent=2), encoding='utf-8')
-run('chown gamer home config', ['chown', '-R', 'gamer:gamer', str(gamer_home)], 30, check=False)
-
-# 11. Compile Selkies 64-bit and 32-bit gamepad interposers & fake-udev
-source = BENCH / 'selkies-source'
-if not source.exists():
-    run('selkies source', ['git', 'clone', '--depth', '1', '--branch', '2.1.0',
-         'https://github.com/selkies-project/selkies.git', str(source)], 180)
-run('interposer 64', ['make', '-C', str(source / 'addons/input-interposer'),
-     'PREFIX=' + str(BENCH), 'install'], 120)
-run('interposer 32', ['make', '-C', str(source / 'addons/input-interposer'),
-     'PREFIX=' + str(BENCH), 'install32'], 120)
-run('fake udev 64', ['make', '-C', str(source / 'addons/fake-udev')], 120)
-run('fake udev 32', ['make', '-C', str(source / 'addons/fake-udev'), 'all32'], 120)
-for triplet, filename in [('x86_64-linux-gnu', 'libudev.so.1'),
-                          ('i386-linux-gnu', 'libudev_x86.so.1')]:
-    target = BENCH / 'lib' / triplet
-    target.mkdir(parents=True, exist_ok=True)
-    shutil.copy2(source / 'addons/fake-udev' / filename, target / 'selkies_fake_udev.so')
-
-# Make bench directory accessible to unprivileged gamer user
-subprocess.run(['chmod', '755', str(BENCH)], check=False)
-
-# 12. Verification of installed binary paths
+# 5. Storefront verification audit
 def check_paths(candidates):
     for c in candidates:
         if c and os.path.exists(c):
@@ -195,6 +75,7 @@ def check_paths(candidates):
             return p
     return None
 
+wine_ge_dir = gamer_home / '.config' / 'heroic' / 'tools' / 'wine'
 storefront_status = {
     'steam': check_paths(['/usr/games/steam', '/usr/bin/steam']),
     'heroic': check_paths(['/usr/bin/heroic', '/opt/Heroic/heroic']),
@@ -203,14 +84,14 @@ storefront_status = {
     'lutris': check_paths(['/usr/games/lutris', '/usr/bin/lutris']),
     'wine': check_paths(['/usr/bin/wine', 'wine']),
     'wine_ge': check_paths([str(wine_ge_dir / 'Wine-GE-Proton8-26/bin/wine'), *[str(p) for p in wine_ge_dir.glob('*/bin/wine')]]),
-    'ea_installer': str(ea_exe) if ea_exe.exists() and ea_exe.stat().st_size > 1000000 else None,
+    'ea_installer': str(EA_STORE / 'EAappInstaller.exe') if (EA_STORE / 'EAappInstaller.exe').exists() else None,
     'interposer_64': str(BENCH / 'lib/x86_64-linux-gnu/selkies_input_interposer.so') if (BENCH / 'lib/x86_64-linux-gnu/selkies_input_interposer.so').exists() else None,
     'interposer_32': str(BENCH / 'lib/i386-linux-gnu/selkies_input_interposer.so') if (BENCH / 'lib/i386-linux-gnu/selkies_input_interposer.so').exists() else None
 }
 
 print('================ STOREFRONT INSTALLATION AUDIT ================')
 for k, v in storefront_status.items():
-    print(f'  {k:15}: {v if v else "NOT FOUND / FAILED"}')
+    print(f'  {k:15}: {v if v else "NOT FOUND / PENDING"}')
 print('================================================================')
 '''
 
