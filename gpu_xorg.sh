@@ -15,8 +15,22 @@ if ! command -v Xorg >/dev/null || ! find /usr/lib -name nvidia_drv.so -print -q
     echo 'NVIDIA Xorg display driver or Xorg is missing. Host graphics/display capability is required.' | tee -a "$LOG"
     exit 0
 fi
+# Identical T4 renderer strings cannot identify the card. Pin this X server
+# to nvidia-smi GPU 0's PCI address instead of relying on Xorg probe order.
+pci_address=$(nvidia-smi -i 0 --query-gpu=pci.bus_id --format=csv,noheader 2>/dev/null | head -n 1 | tr -d '[:space:]')
+if [[ ! "$pci_address" =~ ^([[:xdigit:]]+):([[:xdigit:]]+):([[:xdigit:]]+)\.([0-7])$ ]]; then
+    echo "Cannot determine GPU 0 PCI bus ID: $pci_address" | tee -a "$LOG"
+    exit 0
+fi
+domain=$((16#${BASH_REMATCH[1]}))
+bus=$((16#${BASH_REMATCH[2]}))
+device=$((16#${BASH_REMATCH[3]}))
+func_num=${BASH_REMATCH[4]}
+bus_id="PCI:${bus}:${device}:${func_num}"
+if [ "$domain" -ne 0 ]; then bus_id="PCI:${bus}@${domain}:${device}:${func_num}"; fi
 if [ -S /tmp/.X11-unix/X1 ]; then
-    if DISPLAY=:1 XAUTHORITY="$BENCH/nvidia-Xauthority" glxinfo -B 2>&1 | grep -Eiq 'OpenGL renderer string:.*NVIDIA'; then
+    if grep -Fq "BusID \"$bus_id\"" "$BENCH/nvidia-headless.conf" 2>/dev/null && \
+       DISPLAY=:1 XAUTHORITY="$BENCH/nvidia-Xauthority" glxinfo -B 2>&1 | grep -Eiq 'OpenGL vendor string:.*NVIDIA'; then
         DISPLAY=:1 XAUTHORITY="$BENCH/nvidia-Xauthority" xhost +si:localuser:gamer >> "$LOG" 2>&1
         touch "$READY"
         echo 'Reusing verified NVIDIA Xorg display :1.' | tee -a "$LOG"
@@ -26,7 +40,7 @@ if [ -S /tmp/.X11-unix/X1 ]; then
     exit 0
 fi
 
-cat > "$BENCH/nvidia-headless.conf" <<'EOF'
+cat > "$BENCH/nvidia-headless.conf" <<EOF
 Section "ServerLayout"
     Identifier "HeadlessNVIDIA"
     Screen 0 "Screen0"
@@ -34,6 +48,7 @@ EndSection
 Section "Device"
     Identifier "GPU0"
     Driver "nvidia"
+    BusID "$bus_id"
     Option "AllowEmptyInitialConfiguration" "true"
     Option "UseDisplayDevice" "none"
 EndSection

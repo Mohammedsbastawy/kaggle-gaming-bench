@@ -15,6 +15,7 @@ legendary_gui_code = (root / 'legendary_gui.py').read_text(encoding='utf-8')
 auto_optimize_code = (root / 'auto_optimize.py').read_text(encoding='utf-8')
 setup_sh_code = (root / 'setup.sh').read_text(encoding='utf-8')
 gpu_runtime_code = (root / 'gpu_runtime.py').read_text(encoding='utf-8')
+launch_idtech5_code = (root / 'launch_idtech5.py').read_text(encoding='utf-8')
 bench_runtime_code = (root / 'bench_runtime.py').read_text(encoding='utf-8')
 gpu_xorg_code = (root / 'gpu_xorg.sh').read_text(encoding='utf-8')
 probe_nvidia_userspace_code = (root / 'probe_nvidia_userspace.sh').read_text(encoding='utf-8')
@@ -67,6 +68,7 @@ probe_sh = BENCH / 'probe_nvidia_userspace.sh'
 probe_sh.write_text(''' + repr(probe_nvidia_userspace_code) + r''', encoding='utf-8')
 probe_sh.chmod(0o755)
 (BENCH / 'gpu_runtime.py').write_text(''' + repr(gpu_runtime_code) + r''', encoding='utf-8')
+(BENCH / 'launch_idtech5.py').write_text(''' + repr(launch_idtech5_code) + r''', encoding='utf-8')
 
 # 3. Execute setup.sh with live output streaming
 setup_sh.chmod(0o755)
@@ -302,6 +304,7 @@ fix_heroic_sh = {repr(fix_heroic_sh_code)}
 (BENCH / 'legendary_menu.sh').write_text({repr(legendary_menu_code)}, encoding='utf-8')
 (BENCH / 'legendary_gui.py').write_text({repr(legendary_gui_code)}, encoding='utf-8')
 (BENCH / 'gpu_runtime.py').write_text({repr(gpu_runtime_code)}, encoding='utf-8')
+(BENCH / 'launch_idtech5.py').write_text({repr(launch_idtech5_code)}, encoding='utf-8')
 (BENCH / 'bench_runtime.py').write_text({repr(bench_runtime_code)}, encoding='utf-8')
 (BENCH / 'gpu_xorg.sh').write_text({repr(gpu_xorg_code)}, encoding='utf-8')
 (BENCH / 'probe_nvidia_userspace.sh').write_text({repr(probe_nvidia_userspace_code)}, encoding='utf-8')

@@ -493,10 +493,11 @@ def launch(app, wine):
     vgl_ready = Path(vgl).is_file() and (facts.get("virtualgl") or facts.get("egl_device"))
     vgl_display = facts.get("virtualgl_display") or facts.get("egl_device_display") or "egl0"
 
-    # Create single-binary wrapper script with -dl for dlopen interposition
+    # vglrun enables its dlopen interposer by default.  -dl is not a valid
+    # option in current VirtualGL and is interpreted as the executable.
     wrap_script = Path("/tmp/kaggle-game-dev-bench/vgl-wrap.sh")
     try:
-        wrap_script.write_text(f"#!/bin/bash\nexec {vgl} -d {vgl_display} -dl \"$@\"\n", encoding="utf-8")
+        wrap_script.write_text(f"#!/bin/bash\nexec {vgl} -d {vgl_display} \"$@\"\n", encoding="utf-8")
         wrap_script.chmod(0o755)
     except Exception:
         pass
@@ -517,9 +518,9 @@ def launch(app, wine):
     else:
         command = ["legendary", "launch", app, "--wine", wine, "--wrapper", str(wrap_script)]
 
-    # Prepend vglrun with -dl so the entire process tree inherits hardware OpenGL acceleration
+    # Prepend vglrun so the process tree inherits its OpenGL interposers.
     if vgl_ready:
-        command = [vgl, "-d", vgl_display, "-dl", *command]
+        command = [vgl, "-d", vgl_display, *command]
 
     try:
         selected = select_graphics_backend(

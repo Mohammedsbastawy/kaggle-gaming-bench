@@ -437,8 +437,14 @@ class LegendaryApp(tk.Tk):
                 except Exception as wb_err:
                     self.log(f"Notice auto-initializing prefix: {wb_err}")
 
-        cmd = ["python3", "/tmp/kaggle-game-dev-bench/gpu_runtime.py",
-               "launch", app_name, runner]
+        from gpu_runtime import find_game_binary
+        game_binary = find_game_binary(app_name)
+        if game_binary and game_binary.name.lower() == "wolfneworder_x64.exe":
+            cmd = ["python3", "/tmp/kaggle-game-dev-bench/launch_idtech5.py",
+                   "--wine", runner, str(game_binary)]
+        else:
+            cmd = ["python3", "/tmp/kaggle-game-dev-bench/gpu_runtime.py",
+                   "launch", app_name, runner]
         self.lbl_status.config(text=f"▶ Running: {title}", fg=self.c_green)
 
         try:
