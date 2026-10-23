@@ -70,7 +70,7 @@ apt_install "wine runtime" wine wine64 winbind
 apt-get install -y --no-install-recommends -o DPkg::Lock::Timeout=120 wine32:i386 libgl1-mesa-dri:i386 2>/dev/null || true
 
 # 5. Extra libraries for Lutris and Wine Gecko
-apt_install "extra libraries" python3.12 python3-dbus python3-gi python3-yaml python3-lxml python3-requests python3-pil
+apt_install "extra libraries" python3-tk python3.12 python3-dbus python3-gi python3-yaml python3-lxml python3-requests python3-pil
 apt-get install -y --no-install-recommends -o DPkg::Lock::Timeout=120 wine-gecko 2>/dev/null || true
 
 # 6. Python streaming, interface and gaming packages

@@ -6,6 +6,7 @@ root = Path(__file__).parent
 launcher_code = (root / 'dev_launcher.py').read_text(encoding='utf-8')
 fix_heroic_code = (root / 'fix_heroic_config.py').read_text(encoding='utf-8')
 legendary_menu_code = (root / 'legendary_menu.sh').read_text(encoding='utf-8')
+legendary_gui_code = (root / 'legendary_gui.py').read_text(encoding='utf-8')
 setup_sh_code = (root / 'setup.sh').read_text(encoding='utf-8')
 
 install_script = r'''from pathlib import Path
@@ -299,15 +300,42 @@ exec xterm -geometry 95x25 -title "Heroic Config Sanitizer" -e bash -c "echo '==
 """
 (BENCH / 'fix_heroic.sh').write_text(fix_heroic_sh, encoding='utf-8')
 
-# Legendary interactive menu and launch wrapper
+# Legendary interactive menu and graphical interface
 (BENCH / 'legendary_menu.sh').write_text({repr(legendary_menu_code)}, encoding='utf-8')
+(BENCH / 'legendary_gui.py').write_text({repr(legendary_gui_code)}, encoding='utf-8')
 
 legendary_sh = """#!/bin/bash
 export DISPLAY="${{DISPLAY:-:0}}"
 export PATH="/usr/games:/usr/local/bin:/usr/bin:$PATH"
+export HOME="/home/gamer"
 mkdir -p /home/gamer/logs
-LOG="/home/gamer/logs/legendary.log"
-exec xterm -geometry 105x32 -title "Legendary Epic Games Manager" -e /bin/bash /tmp/kaggle-game-dev-bench/legendary_menu.sh >> "$LOG" 2>&1
+LOG="/home/gamer/logs/legendary_gui.log"
+
+for w in /home/gamer/.config/heroic/tools/wine/*/bin/wine; do
+    if [ -f "$w" ]; then
+        if [ ! -f /usr/bin/wine ]; then
+            ln -sf "$w" /usr/bin/wine 2>/dev/null || true
+            ln -sf "$(dirname "$w")/wineserver" /usr/bin/wineserver 2>/dev/null || true
+            ln -sf "$(dirname "$w")/wineboot" /usr/bin/wineboot 2>/dev/null || true
+        fi
+        if [ ! -f /usr/local/bin/wine ]; then
+            ln -sf "$w" /usr/local/bin/wine 2>/dev/null || true
+        fi
+        break
+    fi
+done
+
+if python3 -c "import tkinter" >/dev/null 2>&1; then
+    exec python3 /tmp/kaggle-game-dev-bench/legendary_gui.py >> "$LOG" 2>&1
+else
+    if [ "$(id -u)" -eq 0 ]; then
+        apt-get update -qq && apt-get install -y -qq python3-tk >> "$LOG" 2>&1 || true
+        if python3 -c "import tkinter" >/dev/null 2>&1; then
+            exec python3 /tmp/kaggle-game-dev-bench/legendary_gui.py >> "$LOG" 2>&1
+        fi
+    fi
+    exec xterm -geometry 105x32 -title "Legendary Epic Games Manager" -e /bin/bash /tmp/kaggle-game-dev-bench/legendary_menu.sh >> "$LOG" 2>&1
+fi
 """
 (BENCH / 'launch_legendary.sh').write_text(legendary_sh, encoding='utf-8')
 
