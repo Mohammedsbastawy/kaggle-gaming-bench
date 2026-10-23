@@ -10,7 +10,7 @@ export DEBIAN_FRONTEND=noninteractive
 export PATH="/usr/games:/usr/local/bin:/usr/bin:$PATH"
 
 echo "=========================================================="
-echo "    KAGGLE GAMING & GAME-DEV BENCH BOOTSTRAPPER           "
+echo "    7BZ DEV CLOUD GAME BOOTSTRAPPER                       "
 echo "=========================================================="
 
 # 1. Kill stale apt/dpkg locks if running in dirty interactive session
@@ -59,7 +59,7 @@ apt-get update -o DPkg::Lock::Timeout=120 -qq || true
 apt_install "core desktop" \
     xvfb openbox tint2 xterm pulseaudio pulseaudio-utils xauth dbus-x11 \
     libgl1-mesa-dri libgbm1 libpixman-1-0 libxkbcommon0 mesa-utils x11-utils vulkan-tools \
-    xdotool wmctrl wget curl cabextract p7zip-full
+    xdotool wmctrl wget curl cabextract p7zip-full winetricks
 
 # Build tools (isolated so multilib issues don't block core)
 apt_install "build tools" git make gcc
@@ -209,6 +209,22 @@ if [ -x "$WINE_GE_DIR/Wine-GE-Proton8-26/bin/wineboot" ]; then
         runuser -u gamer -- env WINEPREFIX="/home/gamer/.wine" WINEARCH=win64 WINEDLLOVERRIDES="mscoree,mshtml=d" \
             "$WINE_GE_DIR/Wine-GE-Proton8-26/bin/wine" "$REDIST_DIR/vc_redist.x86.exe" /install /quiet /norestart 2>/dev/null || true
     fi
+    echo "▶ Installing the Unreal Engine Visual C++ 2019 prerequisite..."
+    runuser -u gamer -- env WINEPREFIX="/home/gamer/.wine" WINEARCH=win64 WINEDLLOVERRIDES="mscoree,mshtml=d" \
+        winetricks -q vcrun2019 2>/dev/null || true
+
+    echo "▶ Applying verified DirectInput and zero-acceleration mouse settings..."
+    for mouse_entry in \
+        'HKEY_CURRENT_USER\Software\Wine\DirectInput|MouseWarpOverride|disable' \
+        'HKEY_CURRENT_USER\Control Panel\Mouse|MouseSpeed|0' \
+        'HKEY_CURRENT_USER\Control Panel\Mouse|MouseThreshold1|0' \
+        'HKEY_CURRENT_USER\Control Panel\Mouse|MouseThreshold2|0' \
+        'HKEY_CURRENT_USER\Control Panel\Mouse|MouseSensitivity|5'; do
+        IFS='|' read -r mouse_key mouse_name mouse_value <<< "$mouse_entry"
+        runuser -u gamer -- env WINEPREFIX="/home/gamer/.wine" WINEARCH=win64 \
+            "$WINE_GE_DIR/Wine-GE-Proton8-26/bin/wine" reg add "$mouse_key" \
+            /v "$mouse_name" /t REG_SZ /d "$mouse_value" /f 2>/dev/null || true
+    done
     echo "✓ Microsoft Visual C++ runtimes installed."
 fi
 

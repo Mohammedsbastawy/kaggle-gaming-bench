@@ -4,6 +4,11 @@ from pathlib import Path
 
 root = Path(__file__).parent
 launcher_code = (root / 'dev_launcher.py').read_text(encoding='utf-8')
+game_catalog_code = (root / 'game_catalog.py').read_text(encoding='utf-8')
+session_control_code = (root / 'session_control.py').read_text(encoding='utf-8')
+install_web_client_code = (root / 'install_web_client.py').read_text(encoding='utf-8')
+hud_css = (root / 'web_client' / 'hud.css').read_text(encoding='utf-8')
+hud_js = (root / 'web_client' / 'hud.js').read_text(encoding='utf-8')
 fix_heroic_code = (root / 'fix_heroic_config.py').read_text(encoding='utf-8')
 legendary_menu_code = (root / 'legendary_menu.sh').read_text(encoding='utf-8')
 legendary_gui_code = (root / 'legendary_gui.py').read_text(encoding='utf-8')
@@ -114,9 +119,15 @@ import os, subprocess
 BENCH = Path('/tmp/kaggle-game-dev-bench')
 BENCH.mkdir(parents=True, exist_ok=True)
 (BENCH / 'logs').mkdir(parents=True, exist_ok=True)
+(BENCH / 'web_client').mkdir(parents=True, exist_ok=True)
 
-# Write controller-friendly launcher UI
+# Write the console dashboard, catalog, emergency service, and streaming HUD
 (BENCH / 'dev_launcher.py').write_text({repr(launcher_code)}, encoding='utf-8')
+(BENCH / 'game_catalog.py').write_text({repr(game_catalog_code)}, encoding='utf-8')
+(BENCH / 'session_control.py').write_text({repr(session_control_code)}, encoding='utf-8')
+(BENCH / 'install_web_client.py').write_text({repr(install_web_client_code)}, encoding='utf-8')
+(BENCH / 'web_client' / 'hud.css').write_text({repr(hud_css)}, encoding='utf-8')
+(BENCH / 'web_client' / 'hud.js').write_text({repr(hud_js)}, encoding='utf-8')
 
 # Write tint2 panel configuration for desktop taskbar
 tint2rc = """# Minimal dark tint2 panel configuration
@@ -363,6 +374,9 @@ wrapper = BENCH / 'start-desktop.sh'
 wrapper.write_text(''' + repr(start_desktop_code) + r''', encoding='utf-8')
 wrapper.chmod(0o755)
 
+# Build a custom Selkies web root without changing the installed streaming core.
+subprocess.run([sys.executable, str(BENCH / 'install_web_client.py')], check=True)
+
 # Stop any previous session
 pidfile = BENCH / 'selkies.pid'
 if pidfile.exists():
@@ -379,12 +393,16 @@ env = os.environ.copy()
 env['PATH'] = f"/usr/local/bin:/usr/games:/usr/bin:{env.get('PATH', '')}"
 env.update(SELKIES_ENABLE_HTTPS='false', SELKIES_MODE='websockets',
            SELKIES_ALLOWED_ORIGINS='https://kkb-production.jupyter-proxy.kaggle.net',
-           SELKIES_ENCODER='h264enc', SELKIES_FRAMERATE='60',
+           SELKIES_ENCODER='h264enc', SELKIES_FRAMERATE='60,30-60',
+           SELKIES_VIDEO_BITRATE='8000,2000-15000',
+           SELKIES_RATE_CONTROL_MODE='cbr', SELKIES_ENABLE_RESIZE='true',
            SELKIES_AUDIO_ENABLED='true', SELKIES_AUDIO_CHANNELS='2',
            SELKIES_AUDIO_BITRATE='128000', SELKIES_GAMEPAD_ENABLED='true',
            SELKIES_UINPUT_GAMEPAD='false',
-           SELKIES_UI_TITLE='Linux Gaming & Game-Dev Environment',
+           SELKIES_UI_TITLE='7BZ Dev Cloud Game',
+           SELKIES_UI_SHOW_SIDEBAR='false', SELKIES_UI_SHOW_LOGO='false',
            SELKIES_MANUAL_WIDTH='1280', SELKIES_MANUAL_HEIGHT='720',
+           SELKIES_WEB_ROOT=str(BENCH / 'web-root'),
            FILE_MANAGER_PATH=str(BUILDS),
            SDL_AUDIODRIVER='pulse')
 
@@ -557,7 +575,7 @@ for test in smoke_tests:
     except Exception:
         pass
 
-subprocess.run(['wmctrl', '-a', 'Game Lab'], capture_output=True, timeout=5,
+subprocess.run(['wmctrl', '-a', '7BZ Dev Cloud Game'], capture_output=True, timeout=5,
                env=probe_env)
 time.sleep(1)
 
@@ -654,17 +672,17 @@ Path('/kaggle/working/game_dev_bench_health.json').write_text(json.dumps(report,
 print('================== HEALTH & DIAGNOSTIC REPORT ==================')
 print(json.dumps(report, indent=2))
 print('================================================================')
-print('Linux Gaming & Game-Dev Bench is running in the active session.')
+print('7BZ Dev Cloud Game is running in the active session.')
 '''
 
 link_script = r'''from IPython.display import display, HTML
 display(HTML(r"""
 <div style="font:16px system-ui, -apple-system, sans-serif;padding:24px;border-radius:16px;background:#0d1729;color:#f4f8ff;max-width:760px;box-shadow:0 8px 24px rgba(0,0,0,0.5)">
   <h2 style="margin-top:0;color:#4dcdf2;display:flex;align-items:center;gap:10px">
-    <span>🎮</span> Linux Gaming & Game-Dev Environment
+    <span>🎮</span> 7BZ Dev Cloud Game
   </h2>
   <p style="color:#b0c4de;line-height:1.5">
-    Temporary storefront and game-build test bench with <b>Steam</b>, <b>Heroic</b>, <b>Legendary</b>, <b>Minigalaxy</b>, <b>Lutris</b>, and an experimental <b>EA App</b> installer.
+    Controller-first cloud game library with <b>Steam</b>, <b>Heroic</b>, <b>Legendary</b>, <b>Minigalaxy</b>, and <b>Lutris</b>.
   </p>
 
   <div style="background:#132238;padding:16px;border-radius:12px;margin:16px 0;border-left:4px solid #4dcdf2">
@@ -672,8 +690,8 @@ display(HTML(r"""
     <ol style="margin:8px 0 0 18px;padding:0;color:#c8daf0;line-height:1.6">
       <li>In Kaggle, open <b>Run → Kaggle Jupyter Server</b> and copy the <b>VSCode Compatible URL</b>.</li>
       <li>Paste it into the field below and click <b>Connect to Stream</b>.</li>
-      <li>In the Selkies client, click the sound icon to unmute Opus stereo audio.</li>
-      <li>Navigate the storefront launcher with your keyboard, mouse, or connected gamepad!</li>
+      <li>Open the 7BZ HUD and select <b>Audio Unmute</b> for Opus stereo audio.</li>
+      <li>Set your local keyboard layout to English (EN), then use mouse, keyboard, or gamepad navigation.</li>
     </ol>
   </div>
 
@@ -688,7 +706,7 @@ display(HTML(r"""
     <ul style="margin:6px 0 0 16px;padding:0;line-height:1.5">
       <li><b>User state:</b> Storefronts run as <code>gamer</code>; their temporary credentials and caches are under <code>/home/gamer</code>.</li>
       <li><b>Storefront EULA:</b> Valve's Subscriber Agreement is presented to the user directly in the Steam GUI on first launch.</li>
-      <li><b>Rendering Limits:</b> T4 NVENC hardware H.264 stream at 60 FPS verified. Native 3D uses software Mesa llvmpipe; datacenter T4 lacks container display nodes and Vulkan ICD.</li>
+      <li><b>GPU path:</b> T4 NVENC H.264 streaming and VirtualGL <code>egl0</code> offscreen 3D are verified. DXVK remains capability-gated.</li>
       <li><b>Custom Builds:</b> Upload test Linux builds into <code style="color:#4dcdf2">/tmp/game-builds</code> via Selkies Files panel.</li>
     </ul>
   </div>
@@ -718,9 +736,9 @@ cells = [
         'cell_type': 'markdown',
         'metadata': {},
         'source': [
-            '# Linux Gaming & Game-Development Environment\n',
+            '# 7BZ Dev Cloud Game\n',
             '\n',
-            'Temporary visual testing environment and Linux gaming storefront bench on Kaggle.\n',
+            'Controller-first Tesla T4 cloud gaming and development console on Kaggle.\n',
             '\n',
             '### Architecture & Storefront Suite\n',
             '- **Unprivileged Execution**: Storefronts and games execute under standard user `gamer` for credential protection and clean user space.\n',
@@ -730,13 +748,14 @@ cells = [
             '- **GOG Galaxy (Minigalaxy & Heroic)**: DRM-free client for GOG games. Supports native Linux builds and Wine.\n',
             '- **Lutris Gaming Hub**: Multi-storefront aggregator installed from Ubuntu multiverse.\n',
             '- **EA App (experimental)**: Wine installer opens; login and game execution need interactive validation.\n',
-            '- **Controller-Friendly Launcher**: Pygame launcher supporting userspace Xbox controllers, keyboard, and mouse navigation.\n',
+            '- **7BZ Console Dashboard**: Card library and storefront hub with mouse, keyboard, and full gamepad navigation.\n',
+            '- **Streaming HUD**: English glass overlay with WebSocket telemetry, adaptive bitrate, browser controls, and emergency game exit.\n',
             '- **Desktop Window Management**: Openbox window manager and tint2 taskbar panel for smooth multi-window multitasking.\n',
             '- **Selkies 2.1.0 Streaming**: Tesla T4 NVENC hardware H.264 video encoding at 60 FPS, Opus stereo audio, and 4 virtual Xbox gamepad sockets over Kaggle signed Jupyter Server proxy.\n',
             '\n',
             '### Hardware Reality & Constraints\n',
             '- **NVENC Hardware Acceleration**: Encoding is hardware-accelerated on Tesla T4 via NVENC.\n',
-            '- **Desktop 3D Rendering**: Rendered via Mesa llvmpipe (software rasterization) because Kaggle datacenter containers lack NVIDIA display and render nodes (`/dev/nvidia-modeset`, `/dev/dri/renderD128`). Native Vulkan and DXVK hardware games are unavailable.\n',
+            '- **Desktop 3D Rendering**: Verified NVIDIA offscreen rendering through VirtualGL `egl0`; Vulkan/DXVK remains enabled only when its complete runtime probe passes.\n',
             '\n',
             '### Instructions\n',
             '1. Set **Accelerator: GPU T4 x2** and **Internet: On** in the Kaggle sidebar.\n',

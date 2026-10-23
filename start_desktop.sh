@@ -16,6 +16,15 @@ fi
 printf '%s' "${XAUTHORITY:-}" > /tmp/kaggle-game-dev-bench/xauthority-path
 printf '%s' "${PULSE_SERVER:-}" > /tmp/kaggle-game-dev-bench/pulse-server-path
 
+if [ -z "${PULSE_SERVER:-}" ]; then
+    for pulse_socket in /run/user/1000/pulse/native /tmp/pulse-*/native; do
+        if [ -S "$pulse_socket" ]; then
+            export PULSE_SERVER="unix:$pulse_socket"
+            break
+        fi
+    done
+fi
+
 # Xvfb remains the Selkies capture desktop. A separate NVIDIA Xorg display is
 # used only when the host mounted the display driver and a renderer test passes.
 if [ "$(id -u)" -eq 0 ]; then
@@ -24,6 +33,7 @@ fi
 
 # Grant unprivileged gamer user access to X11 display
 xhost +si:localuser:gamer 2>/dev/null || true
+xset m 0 0 2>/dev/null || true
 
 # Grant unprivileged gamer user access to PulseAudio socket and runtime directory
 chmod 777 "$XDG_RUNTIME_DIR" 2>/dev/null || true
@@ -56,6 +66,21 @@ openbox &
 if which tint2 >/dev/null 2>&1; then
     tint2 -c /tmp/kaggle-game-dev-bench/tint2rc &
 fi
+
+# Keep the emergency HUD control plane separate from Selkies and the desktop.
+control_pidfile=/tmp/kaggle-game-dev-bench/session-control.pid
+if [ -f "$control_pidfile" ]; then
+    control_pid=$(cat "$control_pidfile" 2>/dev/null || true)
+    if [ -n "$control_pid" ] && [ -r "/proc/$control_pid/cmdline" ] && \
+       tr '\0' ' ' < "/proc/$control_pid/cmdline" | grep -q '/tmp/kaggle-game-dev-bench/session_control.py'; then
+        kill "$control_pid" 2>/dev/null || true
+    fi
+fi
+runuser -u gamer -- env DISPLAY="$DISPLAY" HOME=/home/gamer PATH="$PATH" \
+    PULSE_SERVER="${PULSE_SERVER:-}" SDL_AUDIODRIVER=pulse \
+    python3 /tmp/kaggle-game-dev-bench/session_control.py \
+    >> /home/gamer/logs/session-control.log 2>&1 &
+echo $! > "$control_pidfile"
 
 # Run the controller-friendly launcher UI as the main session process
 if [ "$(id -u)" -eq 0 ]; then

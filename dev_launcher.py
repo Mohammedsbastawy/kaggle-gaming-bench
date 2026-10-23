@@ -1,540 +1,355 @@
-"""Controller-friendly launcher and diagnostic interface for Linux gaming storefronts."""
-from pathlib import Path
-import json
-import math
+"""Ten-foot console dashboard for 7BZ Dev Cloud Game."""
+import hashlib
 import os
-import shutil
+from pathlib import Path
 import subprocess
+import threading
 import time
+import urllib.request
+from typing import Any, Dict, List, Optional, Tuple
 
 import pygame
 
-# Ensure /usr/games is in PATH
-os.environ['PATH'] = f"/usr/games:/usr/local/bin:/usr/bin:{os.environ.get('PATH', '')}"
+from game_catalog import STOREFRONTS, cache_path, discover_games
+from session_control import clear_active_game, write_active_game
 
-BENCH = Path('/tmp/kaggle-game-dev-bench')
-LOGS = Path('/home/gamer/logs')
+
+os.environ["PATH"] = f"/usr/games:/usr/local/bin:/usr/bin:{os.environ.get('PATH', '')}"
+BENCH = Path("/tmp/kaggle-game-dev-bench")
+LOGS = Path("/home/gamer/logs")
 LOGS.mkdir(parents=True, exist_ok=True)
-BUILDS = Path('/tmp/game-builds')
-BUILDS.mkdir(parents=True, exist_ok=True)
-
 WIDTH, HEIGHT = 1280, 720
-BG = (7, 15, 26)
-CARD_BG = (15, 28, 43)
-ITEM_BG = (19, 38, 53)
-ITEM_SEL_BG = (27, 68, 86)
-TEXT_WHITE = (235, 242, 255)
-TEXT_MUTED = (134, 154, 187)
-ACCENT = (102, 207, 226)
-GREEN = (46, 204, 113)
-YELLOW = (241, 196, 15)
-RED = (231, 76, 60)
-BORDER_SEL = (77, 205, 242)
+BG = (7, 10, 20)
+PANEL = (16, 22, 39)
+PANEL_LIGHT = (24, 33, 56)
+TEXT = (244, 247, 255)
+MUTED = (150, 162, 188)
+CYAN = (72, 215, 255)
+VIOLET = (143, 124, 255)
+GREEN = (78, 230, 168)
+TABS = ("HOME", "LIBRARY", "STORES", "BUILDS")
 
 pygame.init()
-pygame.display.set_caption('Game Lab')
-screen = pygame.display.set_mode((WIDTH, HEIGHT), pygame.RESIZABLE)
+pygame.display.set_caption("7BZ Dev Cloud Game")
+display = pygame.display.set_mode((WIDTH, HEIGHT), pygame.RESIZABLE)
+screen = pygame.Surface((WIDTH, HEIGHT)).convert()
 clock = pygame.time.Clock()
+font_logo = pygame.font.SysFont("DejaVu Sans", 27, bold=True)
+font_hero = pygame.font.SysFont("DejaVu Sans", 35, bold=True)
+font_card = pygame.font.SysFont("DejaVu Sans", 17, bold=True)
+font_body = pygame.font.SysFont("DejaVu Sans", 14)
+font_small = pygame.font.SysFont("DejaVu Sans", 12)
+font_tiny = pygame.font.SysFont("DejaVu Sans", 10, bold=True)
 
-font_title = pygame.font.SysFont('DejaVu Sans', 27, bold=True)
-font_hero = pygame.font.SysFont('DejaVu Sans', 38, bold=True)
-font_item = pygame.font.SysFont('DejaVu Sans', 18, bold=True)
-font_badge = pygame.font.SysFont('DejaVu Sans', 13, bold=True)
-font_body = pygame.font.SysFont('DejaVu Sans', 15)
-font_mono = pygame.font.SysFont('DejaVu Sans Mono', 13)
-font_small = pygame.font.SysFont('DejaVu Sans', 13)
 
-def resolve_bin(candidates):
-    for c in candidates:
-        if c and os.path.exists(c):
-            return c
-        p = shutil.which(c)
-        if p:
-            return p
-    return candidates[0] if candidates else None
+def pulse_server() -> str:
+    """Return the active PulseAudio socket for every child process."""
+    configured = os.environ.get("PULSE_SERVER", "")
+    if configured:
+        return configured
+    candidates = [Path("/run/user/1000/pulse/native")]
+    candidates.extend(Path("/tmp").glob("pulse-*/native"))
+    for candidate in candidates:
+        if candidate.exists():
+            return f"unix:{candidate}"
+    return ""
 
-STOREFRONTS = [
-    {
-        'id': 'optimizer',
-        'badge': 'AUTO',
-        'badge_color': (220, 160, 0),
-        'title': 'Auto-Optimize (تلقائي)',
-        'script': str(BENCH / 'launch_optimizer.sh'),
-        'log': str(LOGS / 'auto_optimize.log'),
-        'desc': 'One-click auto-detect internet speed and apply optimal streaming & rendering quality. Also fixes Esc key exiting browser fullscreen.',
-        'compat': 'Adjusts display resolution, Wine renderer, and keyboard lock automatically.',
-        'cmd': 'python3 /tmp/kaggle-game-dev-bench/auto_optimize.py'
-    },
-    {
-        'id': 'steam',
-        'badge': 'STM',
-        'badge_color': (30, 80, 160),
-        'title': 'Steam',
-        'script': str(BENCH / 'launch_steam.sh'),
-        'log': str(LOGS / 'steam.log'),
-        'desc': 'Open Steam and sign in to your own library. The first launch may download client components and request agreement acceptance.',
-        'compat': 'Linux native builds run directly. Proton/DXVK games requiring hardware Vulkan ICD will fail (Tesla T4 lacks container display/render nodes).',
-        'cmd': 'steam -no-cef-sandbox -cef-disable-gpu -cef-force-software-rendering'
-    },
-    {
-        'id': 'epic',
-        'badge': 'EGS',
-        'badge_color': (30, 140, 70),
-        'title': 'Epic Games · Heroic',
-        'script': str(BENCH / 'launch_heroic.sh'),
-        'log': str(LOGS / 'heroic.log'),
-        'desc': 'Browse your Epic and GOG libraries in Heroic. For a game stuck on Launching, use the diagnostics tile and inspect its lastPlay log.',
-        'compat': 'WineD3D is configured for Windows games. Actual game launch depends on the title and its runtime requirements.',
-        'cmd': 'heroic --no-sandbox --disable-gpu --disable-gpu-compositing'
-    },
-    {
-        'id': 'legendary',
-        'badge': 'LEG',
-        'badge_color': (35, 120, 180),
-        'title': 'Epic Games · Legendary',
-        'script': str(BENCH / 'launch_legendary.sh'),
-        'log': str(LOGS / 'legendary.log'),
-        'desc': 'Direct Epic Games launch path for diagnosing Heroic. Sign in, list installed games, then launch with Wine and capture the exact output.',
-        'compat': 'An earlier prototype launched Wolfenstein here. Recheck each title in the current Kaggle session.',
-        'cmd': 'legendary launch APP --wine WINE_BIN'
-    },
-    {
-        'id': 'heroic_fix',
-        'badge': 'FIX',
-        'badge_color': (220, 100, 30),
-        'title': 'Heroic diagnostics & repair',
-        'script': str(BENCH / 'fix_heroic.sh'),
-        'log': str(LOGS / 'heroic_fix.log'),
-        'desc': 'Back up Heroic game settings, select WineD3D compatible options, and display recent launch logs. Existing Wine prefixes stay intact.',
-        'compat': 'Settings repair can address runner mismatch. It does not guarantee every game will run.',
-        'cmd': 'python3 /tmp/kaggle-game-dev-bench/fix_heroic_config.py'
-    },
-    {
-        'id': 'gog',
-        'badge': 'GOG',
-        'badge_color': (140, 40, 160),
-        'title': 'GOG · Minigalaxy',
-        'script': str(BENCH / 'launch_minigalaxy.sh'),
-        'log': str(LOGS / 'minigalaxy.log'),
-        'desc': "DRM-free GOG library client running as user 'gamer'. Fast lightweight GTK interface for native Linux and Wine games. (GOG is also accessible inside Heroic).",
-        'compat': 'Client starts in this container; sign-in and individual game execution require interactive validation.',
-        'cmd': 'minigalaxy'
-    },
-    {
-        'id': 'lutris',
-        'badge': 'LUT',
-        'badge_color': (200, 120, 20),
-        'title': 'Lutris',
-        'script': str(BENCH / 'launch_lutris.sh'),
-        'log': str(LOGS / 'lutris.log'),
-        'desc': "Universal game manager running as user 'gamer'. Integrates Steam, Epic Games, GOG, EA, Wine runners, and custom Linux emulators and test builds.",
-        'compat': 'Multi-storefront aggregator. Runner management and automated installer scripts.',
-        'cmd': 'lutris'
-    },
-    {
-        'id': 'ea',
-        'badge': 'EA ',
-        'badge_color': (180, 40, 40),
-        'title': 'EA App · experimental',
-        'script': str(BENCH / 'launch_ea.sh'),
-        'log': str(LOGS / 'ea.log'),
-        'desc': "Electronic Arts Windows installer/client under Wine64 as user 'gamer'. Downloads official EAappInstaller.exe into isolated wineprefix.",
-        'compat': 'Installer window was observed. Client sign-in and game launch are unverified.',
-        'cmd': 'WINEPREFIX=/home/gamer/ea-prefix wine EAappInstaller.exe'
-    },
-    {
-        'id': 'terminal',
-        'badge': 'CLI',
-        'badge_color': (80, 90, 110),
-        'title': 'Terminal (xterm)',
-        'script': 'xterm',
-        'log': str(LOGS / 'terminal.log'),
-        'desc': 'Interactive X11 shell for inspecting the container, checking wine prefixes, running apt or git commands, or viewing logs.',
-        'compat': 'Shell access in active Kaggle session.',
-        'cmd': 'xterm -geometry 100x30 -title "Dev Bench Terminal"'
-    },
-    {
-        'id': 'audio',
-        'badge': 'AUD',
-        'badge_color': (40, 160, 180),
-        'title': 'Stereo Audio Test',
-        'script': None,
-        'log': None,
-        'desc': 'Generates stereo tone (440 Hz Left, 660 Hz Right) through PulseAudio monitor sink -> Selkies Opus stereo stream.',
-        'compat': 'Verifies PulseAudio -> Selkies Opus 128 kbps stereo pipeline in your browser.',
-        'cmd': 'pygame.mixer stereo tone (440Hz L / 660Hz R)'
-    },
-    {
-        'id': 'video',
-        'badge': 'VID',
-        'badge_color': (60, 180, 100),
-        'title': 'Video Motion Test',
-        'script': None,
-        'log': None,
-        'desc': 'Toggles real-time animated vertical bars to verify 60 FPS Xvfb capture and Tesla T4 NVENC H.264 encode smoothness.',
-        'compat': 'Tesla T4 NVENC hardware encoder active.',
-        'cmd': 'Real-time 60 FPS animated pattern'
-    }
-]
 
-# Track background processes
-procs = {}
+def game_env() -> Dict[str, str]:
+    """Build the common X11, controller, and PulseAudio environment."""
+    env = os.environ.copy()
+    env.update(DISPLAY=env.get("DISPLAY", ":0"), HOME="/home/gamer", SDL_AUDIODRIVER="pulse")
+    server = pulse_server()
+    if server:
+        env["PULSE_SERVER"] = server
+    return env
 
-def scan_builds():
-    builds = []
-    if BUILDS.exists():
-        for path in sorted(BUILDS.iterdir()):
-            if path.is_file() and path.suffix.lower() in ('.sh', '.appimage', '.x86_64', '.bin'):
-                builds.append({
-                    'id': f'build_{path.name}',
-                    'badge': 'BLD',
-                    'badge_color': (100, 100, 200),
-                    'title': f'Build: {path.name}',
-                    'script': str(path),
-                    'log': str(LOGS / f'{path.name}.log'),
-                    'desc': f'Uploaded Linux executable build in /tmp/game-builds/{path.name}. Upload more via Selkies Files panel.',
-                    'compat': 'Executes inside container X11/PulseAudio environment.',
-                    'cmd': f'/bin/bash {path}' if path.suffix.lower() == '.sh' else str(path)
-                })
-    return builds
 
-def tone():
-    """A stereo left/right tone for testing the browser audio path."""
-    import array
-    rate = 48000
-    samples = array.array('h')
-    for i in range(rate):
-        t = i / rate
-        samples.extend((int(7000 * math.sin(2 * math.pi * 440 * t)),
-                        int(7000 * math.sin(2 * math.pi * 660 * t))))
-    try:
-        pygame.mixer.init(frequency=rate, size=-16, channels=2, buffer=512)
-        pygame.mixer.Sound(buffer=samples.tobytes()).play()
-        return 'Stereo tone emitted: 440 Hz Left, 660 Hz Right'
-    except Exception as exc:
-        return 'Audio unavailable: ' + str(exc)[:80]
+def wine_runner() -> str:
+    candidates = [Path("/home/gamer/.config/heroic/tools/wine/Wine-GE-Proton8-26/bin/wine"),
+                  *Path("/home/gamer/.config/heroic/tools/wine").glob("*/bin/wine"), Path("/usr/bin/wine")]
+    return str(next((path for path in candidates if path.is_file()), Path("/usr/bin/wine")))
 
-def launch_item(item):
-    item_id = item['id']
-    if item_id == 'audio':
-        return tone()
-    if item_id == 'video':
-        return 'Video test running in bottom strip. Check 60 FPS.'
-    
-    # Check if already running
-    p = procs.get(item_id)
-    if p is not None and p.poll() is None:
-        return f'{item["title"]} is already running (PID {p.pid}). Switch to it via taskbar or Alt+Tab.'
-    
-    script = item.get('script')
-    if not script:
-        return 'No executable script configured.'
-    
-    try:
-        log_path = item.get('log') or str(LOGS / f'{item_id}.log')
-        log_fh = open(log_path, 'a', buffering=1)
-        log_fh.write(f"\n--- Launching {item['title']} at {time.strftime('%Y-%m-%d %H:%M:%S')} ---\n")
-        
-        env = os.environ.copy()
-        env['DISPLAY'] = env.get('DISPLAY', ':0')
-        env['PATH'] = f"/usr/games:/usr/local/bin:/usr/bin:{env.get('PATH', '')}"
-        env['SDL_AUDIODRIVER'] = 'pulse'
-        
-        if script == 'xterm':
-            cmd = ['xterm', '-geometry', '100x30', '-title', 'Dev Bench Terminal']
-        elif script.endswith('.sh'):
-            cmd = ['/bin/bash', script]
-        else:
-            if not os.access(script, os.X_OK):
-                return f'{Path(script).name} is not executable. Set its execute bit after upload.'
-            cmd = [script]
-            
-        proc = subprocess.Popen(cmd, stdout=log_fh, stderr=subprocess.STDOUT,
-                                stdin=subprocess.DEVNULL, env=env, start_new_session=True)
-        procs[item_id] = proc
-        return f'Launched {item["title"]} (PID {proc.pid}). Window will appear in Openbox.'
-    except Exception as exc:
-        return f'Failed to launch {item["title"]}: {str(exc)[:80]}'
 
-def stop_item(item):
-    item_id = item['id']
-    p = procs.get(item_id)
-    if p is not None and p.poll() is None:
+class Artwork:
+    """Download and cache game artwork without blocking the render loop."""
+
+    def __init__(self) -> None:
+        self.surfaces: Dict[str, pygame.Surface] = {}
+        self.pending = set()
+
+    def get(self, item: Dict[str, Any], size: Tuple[int, int]) -> Optional[pygame.Surface]:
+        key = f"{item['id']}:{size[0]}x{size[1]}"
+        if key in self.surfaces:
+            return self.surfaces[key]
+        path = cache_path(item["id"])
+        if path.is_file():
+            try:
+                loaded = pygame.image.load(str(path)).convert()
+                self.surfaces[key] = pygame.transform.smoothscale(loaded, size)
+                return self.surfaces[key]
+            except pygame.error:
+                path.unlink(missing_ok=True)
+        url = item.get("art", "")
+        if url and item["id"] not in self.pending:
+            self.pending.add(item["id"])
+            threading.Thread(target=self._download, args=(item["id"], url), daemon=True).start()
+        return None
+
+    def _download(self, item_id: str, url: str) -> None:
+        path = cache_path(item_id)
         try:
-            p.terminate()
-            return f'Sent SIGTERM to {item["title"]} (PID {p.pid}).'
-        except Exception as exc:
-            return f'Error terminating process: {exc}'
-    return f'{item["title"]} is not currently running.'
+            path.parent.mkdir(parents=True, exist_ok=True)
+            request = urllib.request.Request(url, headers={"User-Agent": "7BZ-Console/1.0"})
+            with urllib.request.urlopen(request, timeout=8) as response:
+                data = response.read(8 * 1024 * 1024)
+            if len(data) > 512:
+                path.write_bytes(data)
+        except (OSError, ValueError):
+            pass
+        finally:
+            self.pending.discard(item_id)
 
-def get_proc_status(item):
-    item_id = item['id']
-    if item_id in ('audio', 'video'):
-        return 'READY', GREEN
-    p = procs.get(item_id)
-    if p is None:
-        return 'IDLE', TEXT_MUTED
-    poll = p.poll()
-    if poll is None:
-        return f'RUNNING (PID {p.pid})', GREEN
-    elif poll == 0:
-        return 'STOPPED (Exit 0)', TEXT_MUTED
-    else:
-        return f'EXITED ({poll})', RED
 
-def read_tail(log_path, lines=4):
-    if not log_path or not os.path.exists(log_path):
-        return ['(No log entries yet)']
-    try:
-        content = Path(log_path).read_text(encoding='utf-8', errors='replace').splitlines()
-        tail = [l for l in content if l.strip()][-lines:]
-        return tail if tail else ['(Log is empty)']
-    except Exception:
-        return ['(Unable to read log)']
-
+artwork = Artwork()
+catalog: List[Dict[str, Any]] = []
+tab = 0
 selected = 0
-message = 'Use D-Pad / Stick / Arrow keys to navigate. Press A / Enter to launch.'
-pointer_dx = pointer_dy = 0
-pad_state = 'No gamepad event detected'
-last_scan = 0
-builds = []
-scroll_offset = 0
+last_scan = 0.0
+message = "Choose a game and press A or Enter to play."
+active: Optional[subprocess.Popen] = None
+active_title = ""
+axis_ready = True
+
+
+def storefront_items() -> List[Dict[str, Any]]:
+    return [{**item, "status": "Ready", "store": "Storefront", "subtitle": "Open your game library",
+             "action": "store", "art": ""} for item in STOREFRONTS]
+
+
+def visible_items() -> List[Dict[str, Any]]:
+    if tab == 0:
+        return catalog[:8] + storefront_items()[:4] if catalog else storefront_items()
+    if tab == 1:
+        return catalog
+    if tab == 2:
+        return storefront_items()
+    return [item for item in catalog if item.get("action") == "build"]
+
+
+def command_for(item: Dict[str, Any]) -> List[str]:
+    action = item.get("action")
+    if action == "legendary":
+        return ["python3", str(BENCH / "gpu_runtime.py"), "launch", item["app_name"], wine_runner()]
+    if action == "steam":
+        return ["bash", str(BENCH / "launch_steam.sh"), f"steam://rungameid/{item['app_name']}"]
+    if action == "build":
+        path = item["install_path"]
+        return ["bash", path] if path.lower().endswith(".sh") else [path]
+    if action == "store":
+        return ["bash", item["script"]]
+    raise ValueError("This library item has no launch action")
+
+
+def launch(item: Dict[str, Any]) -> str:
+    global active, active_title
+    if active is not None and active.poll() is None:
+        return f"{active_title} is already running. Press B to stop it first."
+    try:
+        command = command_for(item)
+        log = (LOGS / "dashboard-launch.log").open("a", encoding="utf-8", buffering=1)
+        log.write(f"\n--- {time.strftime('%Y-%m-%d %H:%M:%S')} · {item['title']} ---\n")
+        active = subprocess.Popen(command, env=game_env(), stdin=subprocess.DEVNULL,
+                                  stdout=log, stderr=subprocess.STDOUT, start_new_session=True)
+        active_title = item["title"]
+        write_active_game(active.pid, os.getpgid(active.pid), active_title, item.get("store", "7BZ"))
+        threading.Thread(target=watch_active, args=(active,), daemon=True).start()
+        return f"Launching {active_title}. GPU, audio, and mouse fixes are applied automatically."
+    except (OSError, ValueError) as exc:
+        return f"Launch failed: {str(exc)[:100]}"
+
+
+def watch_active(process: subprocess.Popen) -> None:
+    process.wait()
+    clear_active_game(process.pid)
+
+
+def stop_active() -> str:
+    if active is None or active.poll() is not None:
+        return "No active game is running."
+    try:
+        os.killpg(os.getpgid(active.pid), 15)
+        return f"Stopping {active_title}…"
+    except OSError as exc:
+        return f"Could not stop the game: {exc}"
+
+
+def clipped(text: str, font: pygame.font.Font, width: int) -> str:
+    result = text
+    while result and font.size(result + "…")[0] > width:
+        result = result[:-1]
+    return result + ("…" if result != text else "")
+
+
+def gradient(rect: pygame.Rect, top: Tuple[int, int, int], bottom: Tuple[int, int, int]) -> None:
+    for offset in range(rect.height):
+        ratio = offset / max(1, rect.height - 1)
+        color = tuple(int(top[index] + (bottom[index] - top[index]) * ratio) for index in range(3))
+        pygame.draw.line(screen, color, (rect.x, rect.y + offset), (rect.right, rect.y + offset))
+
+
+def placeholder(item: Dict[str, Any], rect: pygame.Rect) -> None:
+    digest = hashlib.sha256(item["id"].encode()).digest()
+    color_a = (30 + digest[0] % 45, 35 + digest[1] % 55, 65 + digest[2] % 70)
+    gradient(rect, color_a, (12, 14, 27))
+    pygame.draw.circle(screen, CYAN, (rect.right - 35, rect.y + 30), 54, 2)
+    badge = item.get("store", item.get("badge", "7BZ")).upper()[:8]
+    screen.blit(font_tiny.render(badge, True, (220, 231, 255)), (rect.x + 13, rect.y + 12))
+
+
+def draw_art(item: Dict[str, Any], rect: pygame.Rect) -> None:
+    image = artwork.get(item, rect.size)
+    if image:
+        screen.blit(image, rect)
+        shade = pygame.Surface(rect.size, pygame.SRCALPHA)
+        shade.fill((4, 8, 18, 50))
+        screen.blit(shade, rect)
+    else:
+        placeholder(item, rect)
+
+
+def draw_header(width: int) -> None:
+    pygame.draw.rect(screen, (10, 15, 29), (0, 0, width, 88))
+    pygame.draw.rect(screen, CYAN, (0, 0, 5, 88))
+    pygame.draw.rect(screen, VIOLET, (5, 0, 3, 88))
+    screen.blit(font_logo.render("7BZ", True, TEXT), (30, 16))
+    screen.blit(font_body.render("DEV CLOUD GAME", True, CYAN), (94, 24))
+    x = 360
+    for index, label in enumerate(TABS):
+        color = TEXT if index == tab else MUTED
+        surface = font_body.render(label, True, color)
+        screen.blit(surface, (x, 25))
+        if index == tab:
+            pygame.draw.rect(screen, CYAN, (x, 52, surface.get_width(), 3), border_radius=2)
+        x += surface.get_width() + 38
+    status = "GAME ACTIVE" if active is not None and active.poll() is None else "SYSTEM READY"
+    color = CYAN if status == "GAME ACTIVE" else GREEN
+    screen.blit(font_tiny.render(f"●  {status}", True, color), (width - 160, 26))
+    screen.blit(font_small.render(time.strftime("%H:%M"), True, MUTED), (width - 61, 48))
+
+
+def draw_featured(item: Dict[str, Any], width: int) -> None:
+    rect = pygame.Rect(28, 105, width - 56, 214)
+    draw_art(item, rect)
+    overlay = pygame.Surface(rect.size, pygame.SRCALPHA)
+    for x in range(rect.width):
+        alpha = max(0, 215 - int(x / rect.width * 245))
+        pygame.draw.line(overlay, (5, 9, 19, alpha), (x, 0), (x, rect.height))
+    screen.blit(overlay, rect)
+    screen.blit(font_tiny.render(f"{item.get('status', 'READY').upper()}  ·  {item.get('store', '7BZ').upper()}", True, GREEN), (52, 133))
+    screen.blit(font_hero.render(clipped(item["title"], font_hero, 590), True, TEXT), (50, 160))
+    screen.blit(font_body.render(item.get("subtitle", "Ready to play"), True, (210, 221, 244)), (52, 207))
+    play = pygame.Rect(52, 251, 126, 43)
+    pygame.draw.rect(screen, TEXT, play, border_radius=10)
+    screen.blit(font_card.render("PLAY   A", True, BG), (72, 262))
+    screen.blit(font_small.render("Mouse, keyboard, and gamepad ready", True, MUTED), (196, 267))
+
+
+def draw_cards(items: List[Dict[str, Any]], width: int, chosen: int) -> List[Tuple[int, pygame.Rect]]:
+    cards: List[Tuple[int, pygame.Rect]] = []
+    screen.blit(font_tiny.render("YOUR CLOUD LIBRARY", True, MUTED), (30, 346))
+    gap, columns = 14, 4
+    card_width = (width - 60 - gap * (columns - 1)) // columns
+    page_start = (chosen // 8) * 8
+    for local_index, item in enumerate(items[page_start:page_start + 8]):
+        index = page_start + local_index
+        row, column = divmod(local_index, columns)
+        rect = pygame.Rect(30 + column * (card_width + gap), 372 + row * 137, card_width, 121)
+        cards.append((index, rect))
+        selected_now = index == chosen
+        pygame.draw.rect(screen, PANEL_LIGHT if selected_now else PANEL, rect, border_radius=13)
+        draw_art(item, pygame.Rect(rect.x, rect.y, rect.width, 72))
+        pygame.draw.rect(screen, CYAN if selected_now else (47, 59, 84), rect, 3 if selected_now else 1, border_radius=13)
+        screen.blit(font_card.render(clipped(item["title"], font_card, rect.width - 20), True, TEXT), (rect.x + 10, rect.y + 80))
+        screen.blit(font_tiny.render(item.get("store", "7BZ").upper(), True, CYAN if selected_now else MUTED), (rect.x + 10, rect.y + 103))
+    return cards
+
+
+def draw_footer(width: int, height: int) -> None:
+    pygame.draw.rect(screen, (10, 15, 29), (0, height - 42, width, 42))
+    screen.blit(font_small.render(clipped(message, font_small, width - 520), True, MUTED), (28, height - 28))
+    hint = "D-Pad / Stick  Move     A  Play     B  Stop / Back     LB/RB  Tabs"
+    screen.blit(font_small.render(hint, True, (195, 205, 227)), (width - font_small.size(hint)[0] - 28, height - 28))
+
 
 running = True
 while running:
     now = time.monotonic()
-    if now - last_scan > 2:
-        builds = scan_builds()
+    if now - last_scan > 4:
+        catalog = discover_games()
         last_scan = now
-    
-    all_items = STOREFRONTS + builds
-    selected %= max(1, len(all_items))
-    cur = all_items[selected]
-    
-    # Event loop
+    items = visible_items()
+    selected = min(selected, max(0, len(items) - 1))
+    current = items[selected] if items else {"id": "empty", "title": "No games found", "store": "7BZ",
+                                             "status": "Library", "subtitle": "Open a storefront to install a game", "art": ""}
+    w, h = WIDTH, HEIGHT
     for event in pygame.event.get():
         if event.type == pygame.QUIT:
             running = False
+        elif event.type == pygame.VIDEORESIZE:
+            display = pygame.display.set_mode((max(640, event.w), max(360, event.h)), pygame.RESIZABLE)
         elif event.type == pygame.KEYDOWN:
-            if event.key in (pygame.K_ESCAPE, pygame.K_q):
-                running = False
-            elif event.key in (pygame.K_DOWN, pygame.K_s):
-                selected = (selected + 1) % len(all_items)
-            elif event.key in (pygame.K_UP, pygame.K_w):
-                selected = (selected - 1) % len(all_items)
-            elif event.key in (pygame.K_RETURN, pygame.K_SPACE):
-                message = launch_item(cur)
-            elif event.key in (pygame.K_BACKSPACE, pygame.K_DELETE):
-                message = stop_item(cur)
-            elif event.key == pygame.K_x:
-                message = tone()
-            elif pygame.K_1 <= event.key <= pygame.K_8:
-                idx = event.key - pygame.K_1
-                if idx < len(all_items):
-                    selected = idx
-                    message = launch_item(all_items[selected])
-        elif event.type == pygame.MOUSEMOTION:
-            pointer_dx, pointer_dy = event.rel
-        elif event.type == pygame.MOUSEBUTTONDOWN:
-            mx, my = event.pos
-            if event.button == 1:
-                # Left pane item click
-                if 30 <= mx <= 520 and 125 <= my <= 620:
-                    idx = (my - 125) // 56 + scroll_offset
-                    if 0 <= idx < len(all_items):
-                        selected = idx
-                        message = launch_item(all_items[selected])
-                # Launch button
-                elif 550 <= mx <= 700 and 560 <= my <= 605:
-                    message = launch_item(cur)
-                # Stop button
-                elif 715 <= mx <= 840 and 560 <= my <= 605:
-                    message = stop_item(cur)
-                # Audio button
-                elif 855 <= mx <= 1000 and 560 <= my <= 605:
-                    message = tone()
-            elif event.button == 4:
-                scroll_offset = max(0, scroll_offset - 1)
-            elif event.button == 5:
-                scroll_offset = min(max(0, len(all_items) - 8), scroll_offset + 1)
-        elif event.type == pygame.JOYDEVICEADDED:
-            pad = pygame.joystick.Joystick(event.device_index)
-            pad.init()
-            pad_state = f'Gamepad Connected: {pad.get_name()[:40]}'
+            if event.key in (pygame.K_LEFT, pygame.K_a): selected = max(0, selected - 1)
+            elif event.key in (pygame.K_RIGHT, pygame.K_d): selected = min(len(items) - 1, selected + 1)
+            elif event.key in (pygame.K_UP, pygame.K_w): selected = max(0, selected - 4)
+            elif event.key in (pygame.K_DOWN, pygame.K_s): selected = min(len(items) - 1, selected + 4)
+            elif event.key in (pygame.K_RETURN, pygame.K_SPACE) and items: message = launch(current)
+            elif event.key in (pygame.K_BACKSPACE, pygame.K_DELETE, pygame.K_ESCAPE): message = stop_active()
+            elif event.key == pygame.K_TAB:
+                tab = (tab + (-1 if pygame.key.get_mods() & pygame.KMOD_SHIFT else 1)) % len(TABS); selected = 0
+        elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+            mx = round(event.pos[0] * WIDTH / max(1, display.get_width()))
+            my = round(event.pos[1] * HEIGHT / max(1, display.get_height()))
+            if 345 <= mx <= 900 and 8 <= my <= 70:
+                tab_x = 360
+                for tab_index, label in enumerate(TABS):
+                    tab_width = font_body.size(label)[0] + 38
+                    if tab_x <= mx <= tab_x + tab_width:
+                        tab, selected = tab_index, 0
+                        break
+                    tab_x += tab_width
+            elif 52 <= mx <= 178 and 251 <= my <= 294 and items:
+                message = launch(current)
+            else:
+                cards = draw_cards(items, w, selected)
+                for index, rect in cards:
+                    if rect.collidepoint((mx, my)):
+                        if index == selected: message = launch(items[index])
+                        selected = index
         elif event.type == pygame.JOYBUTTONDOWN:
-            pad_state = f'Button {event.button} pressed'
-            if event.button == 0:
-                message = launch_item(cur)
-            elif event.button == 1:
-                message = stop_item(cur)
-            elif event.button == 2:
-                message = tone()
-            elif event.button in (11, 13):
-                selected = (selected + (1 if event.button == 13 else -1)) % len(all_items)
-        elif event.type == pygame.JOYAXISMOTION:
-            if event.axis == 1:
-                if event.value > 0.6:
-                    selected = (selected + 1) % len(all_items)
-                    time.sleep(0.12)
-                elif event.value < -0.6:
-                    selected = (selected - 1) % len(all_items)
-                    time.sleep(0.12)
-            pad_state = f'Axis {event.axis}: {event.value:+.2f}'
+            if event.button == 0 and items: message = launch(current)
+            elif event.button == 1: message = stop_active()
+            elif event.button in (4, 9): tab = (tab - 1) % len(TABS); selected = 0
+            elif event.button in (5, 10): tab = (tab + 1) % len(TABS); selected = 0
+            elif event.button in (11, 12): selected = max(0, selected - 4)
+            elif event.button in (13, 14): selected = min(len(items) - 1, selected + 4)
+        elif event.type == pygame.JOYAXISMOTION and event.axis in (0, 1):
+            if abs(event.value) < .35:
+                axis_ready = True
+            elif axis_ready and items:
+                selected = max(0, min(len(items) - 1, selected + ((1 if event.value > 0 else -1) if event.axis == 0 else (4 if event.value > 0 else -4))))
+                axis_ready = False
 
-    # Adjust scroll offset
-    if selected < scroll_offset:
-        scroll_offset = selected
-    elif selected >= scroll_offset + 8:
-        scroll_offset = selected - 7
-
-    # Render frame
-    w, h = screen.get_size()
-    screen.fill(BG)
-    for gy in range(0, min(h, 720), 3):
-        t = gy / 720
-        pygame.draw.rect(screen, (int(7 + 10*t), int(15 + 17*t), int(26 + 21*t)), (0, gy, w, 3))
-
-    # Top Header Banner
-    pygame.draw.rect(screen, (20, 41, 55), pygame.Rect(0, 0, w, 112))
-    pygame.draw.rect(screen, ACCENT, pygame.Rect(0, 0, 7, 112))
-    screen.blit(font_title.render('GAME LAB', True, TEXT_WHITE), (34, 16))
-    screen.blit(font_body.render('LIBRARY    •    STORES    •    BUILDS    •    DIAGNOSTICS', True, ACCENT), (242, 29))
-    screen.blit(font_small.render('Temporary interactive game development session', True, TEXT_MUTED), (36, 54))
-    
-    # Status pills in header
-    pills = [
-        ('T4 NVENC  •  H.264', GREEN),
-        ('3D  •  GPU probe', YELLOW),
-        ('AUDIO  •  OPUS', GREEN),
-        ('SESSION  •  gamer', GREEN)
-    ]
-    px = 36
-    for ptext, pcolor in pills:
-        s_surf = font_small.render(ptext, True, pcolor)
-        pr = pygame.Rect(px, 78, s_surf.get_width() + 14, 24)
-        pygame.draw.rect(screen, CARD_BG, pr, border_radius=6)
-        pygame.draw.rect(screen, pcolor, pr, 1, border_radius=6)
-        screen.blit(s_surf, (px + 7, 82))
-        px += pr.width + 10
-
-    screen.blit(font_small.render('YOUR LIBRARY', True, TEXT_MUTED), (36, 111))
-    # Left Pane: Storefront & App List
-    visible_items = all_items[scroll_offset:scroll_offset + 8]
-    for i, it in enumerate(visible_items):
-        actual_idx = scroll_offset + i
-        y = 125 + i * 56
-        is_sel = (actual_idx == selected)
-        rect = pygame.Rect(30, y, 480, 50)
-        
-        pygame.draw.rect(screen, ITEM_SEL_BG if is_sel else ITEM_BG, rect, border_radius=10)
-        if is_sel:
-            pygame.draw.rect(screen, BORDER_SEL, rect, 2, border_radius=10)
-            
-        badge_rect = pygame.Rect(40, y + 10, 42, 30)
-        pygame.draw.rect(screen, it['badge_color'], badge_rect, border_radius=6)
-        b_txt = font_badge.render(it['badge'], True, TEXT_WHITE)
-        screen.blit(b_txt, (badge_rect.centerx - b_txt.get_width() // 2, badge_rect.centery - b_txt.get_height() // 2))
-        
-        t_color = TEXT_WHITE if is_sel else (200, 215, 235)
-        screen.blit(font_item.render(it['title'][:32], True, t_color), (92, y + 14))
-        
-        pstatus, pcolor = get_proc_status(it)
-        dot_color = GREEN if 'RUNNING' in pstatus or pstatus == 'READY' else (RED if 'EXITED' in pstatus else TEXT_MUTED)
-        pygame.draw.circle(screen, dot_color, (495, y + 25), 5)
-
-    # Right Pane: Selected Item Detail Card
-    card_rect = pygame.Rect(530, 125, 720, 490)
-    pygame.draw.rect(screen, CARD_BG, card_rect, border_radius=14)
-    pygame.draw.rect(screen, (30, 45, 75), card_rect, 1, border_radius=14)
-    pygame.draw.rect(screen, cur['badge_color'], pygame.Rect(530, 125, 720, 5), border_top_left_radius=14, border_top_right_radius=14)
-
-    # Card Title & Badge
-    cb_rect = pygame.Rect(550, 145, 50, 32)
-    pygame.draw.rect(screen, cur['badge_color'], cb_rect, border_radius=6)
-    cb_txt = font_badge.render(cur['badge'], True, TEXT_WHITE)
-    screen.blit(cb_txt, (cb_rect.centerx - cb_txt.get_width() // 2, cb_rect.centery - cb_txt.get_height() // 2))
-    screen.blit(font_title.render(cur['title'], True, TEXT_WHITE), (610, 144))
-
-    # Description
-    desc_y = 190
-    words = cur['desc'].split()
-    line = ''
-    for word in words:
-        test_line = line + (' ' if line else '') + word
-        if font_body.size(test_line)[0] > 670:
-            screen.blit(font_body.render(line, True, (210, 225, 245)), (550, desc_y))
-            desc_y += 22
-            line = word
-        else:
-            line = test_line
-    if line:
-        screen.blit(font_body.render(line, True, (210, 225, 245)), (550, desc_y))
-        desc_y += 26
-
-    # Process Status Box
-    pbox_rect = pygame.Rect(550, desc_y, 680, 50)
-    pygame.draw.rect(screen, (13, 20, 35), pbox_rect, border_radius=8)
-    pstatus, pcolor = get_proc_status(cur)
-    screen.blit(font_small.render('PROCESS STATE:', True, TEXT_MUTED), (562, desc_y + 8))
-    screen.blit(font_item.render(pstatus, True, pcolor), (562, desc_y + 24))
-    desc_y += 62
-
-    # Command line
-    screen.blit(font_small.render('EXECUTION COMMAND:', True, TEXT_MUTED), (550, desc_y))
-    desc_y += 18
-    cmd_rect = pygame.Rect(550, desc_y, 680, 32)
-    pygame.draw.rect(screen, (13, 20, 35), cmd_rect, border_radius=6)
-    screen.blit(font_mono.render(cur['cmd'][:85], True, ACCENT), (560, desc_y + 8))
-    desc_y += 44
-
-    # Compatibility Box
-    screen.blit(font_small.render('COMPATIBILITY & HARDWARE DIAGNOSTICS:', True, TEXT_MUTED), (550, desc_y))
-    desc_y += 18
-    compat_rect = pygame.Rect(550, desc_y, 680, 52)
-    pygame.draw.rect(screen, (13, 20, 35), compat_rect, border_radius=6)
-    screen.blit(font_small.render(cur['compat'][:95], True, YELLOW), (560, desc_y + 8))
-    screen.blit(font_small.render('T4 NVENC streams video. Game launch checks NVIDIA 3D rendering separately.', True, TEXT_MUTED), (560, desc_y + 28))
-    desc_y += 64
-
-    # Log tail
-    screen.blit(font_small.render('RECENT LOG OUTPUT:', True, TEXT_MUTED), (550, desc_y))
-    desc_y += 18
-    log_rect = pygame.Rect(550, desc_y, 680, 78)
-    pygame.draw.rect(screen, (10, 15, 26), log_rect, border_radius=6)
-    tails = read_tail(cur.get('log'), lines=4)
-    for ly, line_txt in enumerate(tails):
-        screen.blit(font_mono.render(line_txt[:90], True, (170, 185, 205)), (560, desc_y + 6 + ly * 17))
-    desc_y += 90
-
-    # Action Buttons
-    btn_launch = pygame.Rect(550, 560, 150, 42)
-    pygame.draw.rect(screen, (30, 110, 180), btn_launch, border_radius=8)
-    screen.blit(font_item.render('▶ Launch (A)', True, TEXT_WHITE), (568, 571))
-    
-    btn_stop = pygame.Rect(715, 560, 130, 42)
-    pygame.draw.rect(screen, (140, 40, 40), btn_stop, border_radius=8)
-    screen.blit(font_item.render('■ Stop (B)', True, TEXT_WHITE), (735, 571))
-    
-    btn_audio = pygame.Rect(860, 560, 150, 42)
-    pygame.draw.rect(screen, (30, 120, 90), btn_audio, border_radius=8)
-    screen.blit(font_item.render('♫ Audio (X)', True, TEXT_WHITE), (878, 571))
-
-    screen.blit(font_small.render('D-Pad/Stick: Navigate', True, TEXT_MUTED), (1030, 564))
-    screen.blit(font_small.render('Enter: Launch', True, TEXT_MUTED), (1030, 584))
-
-    # Bottom Area: Motion test bar + Diagnostics footer
-    bottom_y = 625
-    tick = now * 180
-    for i in range(16):
-        bx = int((tick + i * 85) % (w + 100)) - 50
-        pygame.draw.rect(screen, (20 + i * 4, 45 + i * 5, 80 + i * 6),
-                         pygame.Rect(bx, bottom_y, 25, 6), border_radius=3)
-    
-    # Status Row
-    screen.blit(font_small.render(f'FPS: {clock.get_fps():.1f} | Display: {w}x{h} | Mouse: {pointer_dx:+d}, {pointer_dy:+d}', True, TEXT_WHITE), (34, 638))
-    screen.blit(font_small.render(pad_state[:75], True, TEXT_MUTED), (34, 660))
-    screen.blit(font_small.render(message[:110], True, ACCENT), (34, 684))
-
+    gradient(pygame.Rect(0, 0, w, h), BG, (13, 17, 31))
+    draw_header(w)
+    draw_featured(current, w)
+    if items:
+        draw_cards(items, w, selected)
+    else:
+        screen.blit(font_body.render("No items are available in this section yet.", True, MUTED), (31, 370))
+    draw_footer(w, h)
+    output = screen if display.get_size() == (WIDTH, HEIGHT) else pygame.transform.smoothscale(screen, display.get_size())
+    display.blit(output, (0, 0))
     pygame.display.flip()
     clock.tick(60)
 

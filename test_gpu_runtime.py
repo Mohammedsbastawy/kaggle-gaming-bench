@@ -3,6 +3,7 @@ from pathlib import Path
 import tempfile
 import unittest
 from unittest.mock import patch
+import json
 
 import gpu_runtime
 
@@ -44,6 +45,31 @@ class RuntimeTests(unittest.TestCase):
                 library.write_bytes(b"\x7fELF\x02mock")
                 with patch.object(gpu_runtime, "run", return_value=(1, "")):
                     self.assertFalse(gpu_runtime.has_32bit_library(library.name))
+
+    def test_unreal_shipping_binary_bypasses_prerequisite_launcher(self):
+        with tempfile.TemporaryDirectory() as directory:
+            home = Path(directory)
+            install = home / "Ghostrunner"
+            shipping = install / "Ghostrunner/Binaries/Win64/Ghostrunner-Win64-Shipping.exe"
+            prerequisite = install / "Engine/Extras/Redist/en-us/UE4Prereq-Win64-Shipping.exe"
+            shipping.parent.mkdir(parents=True)
+            prerequisite.parent.mkdir(parents=True)
+            shipping.write_bytes(b"game")
+            prerequisite.write_bytes(b"prerequisite")
+            database = home / ".config/legendary/installed.json"
+            database.parent.mkdir(parents=True)
+            database.write_text(json.dumps({"Ghostrunner": {"install_path": str(install)}}))
+            with patch.dict(os.environ, {"KAGGLE_GAMER_HOME": str(home)}):
+                self.assertEqual(gpu_runtime.unreal_shipping_binary("Ghostrunner"), shipping)
+
+    def test_mouse_profile_sets_directinput_and_zero_acceleration(self):
+        with patch.object(gpu_runtime.subprocess, "run") as run:
+            gpu_runtime.configure_mouse("wine", {"WINEPREFIX": "/prefix"})
+        values = [entry.args[0][5] for entry in run.call_args_list]
+        self.assertEqual(values, ["MouseWarpOverride", "MouseSpeed", "MouseThreshold1",
+                                  "MouseThreshold2", "MouseSensitivity"])
+        configured = [entry.args[0][9] for entry in run.call_args_list]
+        self.assertEqual(configured, ["disable", "0", "0", "0", "5"])
 
 
 if __name__ == "__main__":

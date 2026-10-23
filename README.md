@@ -1,6 +1,6 @@
-# Linux Gaming & Game-Development Bench for Kaggle
+# 7BZ Dev Cloud Game
 
-A cloud gaming and game-development visual test bench running on Kaggle with an NVIDIA Tesla T4, Selkies 2.1.0 streaming, and multi-storefront integration. GPU video encoding works in the observed container; 3D game rendering currently falls back to the CPU.
+A controller-first cloud gaming and game-development console running on Kaggle with a Tesla T4, Selkies 2.1.0 streaming, and unified storefront integration. The verified live path uses T4 NVENC for H.264 streaming and VirtualGL's headless `egl0` device for offscreen NVIDIA 3D rendering.
 
 [![Kaggle Notebook](https://img.shields.io/badge/Kaggle-Interactive%20GPU%20Bench-20BEFF?logo=kaggle)](https://www.kaggle.com/code/mohammedbastawy/interactive-gpu-game-development-bench-20261023)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
@@ -10,20 +10,20 @@ A cloud gaming and game-development visual test bench running on Kaggle with an 
 ## Architecture Overview
 
 ```text
-Browser: WebCodecs H.264 + Opus Stereo + Gamepad API / Touch Controls
+Browser: 7BZ glass HUD + WebCodecs H.264 + Opus + Gamepad API
     ↕ WSS / HTTPS
 Kaggle Jupyter Server Proxy (/proxy/8080/)
     ↕ localhost
 Selkies 2.1.0 (Tesla T4 NVENC hardware H.264 60 FPS + PulseAudio Opus)
     ↕
-Openbox Window Manager + tint2 Taskbar Panel
+7BZ console dashboard + Openbox window management
     ↕
-Pygame Controller-Friendly Launcher (`dev_launcher.py`)
+Card game library and storefront switcher (`dev_launcher.py`)
     ↕
 Unprivileged User `gamer` (UID 1000):
     ├── Steam Native (Valve 32/64-bit client)
     ├── Heroic Games Launcher (Epic Games & GOG GUI)
-    ├── Legendary CLI Manager (Direct Epic Games execution via WineD3D)
+    ├── Legendary game catalog (VirtualGL egl0 + Wine-GE)
     ├── Minigalaxy (DRM-free GOG GTK client)
     ├── Lutris Gaming Hub (Python 3.12 runner)
     └── EA App (Wine64 runner)
@@ -68,9 +68,10 @@ Then start the Selkies session using the provided starter.
 ## Hardware Reality & Constraints
 
 * **NVENC 60 FPS Streaming**: Tesla T4 hardware encoder captures Xvfb at 1280×720 @ 60 FPS over WebSockets.
-* **Desktop 3D Graphics**: Version 28 exposes compute and NVENC, but its observed NVIDIA OpenGL and Vulkan probes fail; Xvfb renders through llvmpipe. The launcher refuses an unaccelerated game launch by default. `GAMELAB_ALLOW_SOFTWARE=1` opts into a CPU profile for light games and basic tests; it cannot make modern AAA games playable.
+* **Desktop 3D Graphics**: Live testing verified NVIDIA offscreen OpenGL through `/opt/VirtualGL/bin/vglrun -d egl0`. The dashboard probes this path before each Epic game launch and keeps the Xvfb desktop as the Selkies capture surface.
+* **Compatibility**: Vulkan and DXVK remain capability-gated. Games use the verified OpenGL/Wine path when Vulkan presentation is unavailable. `GAMELAB_ALLOW_SOFTWARE=1` remains an explicit fallback for lightweight titles.
 
-See [GPU deployment and CPU fallback](GPU_DEPLOYMENT.md) for the Version 28 diagnosis, one final headless EGL test, and portable GPU host requirements.
+See [GPU deployment](GPU_DEPLOYMENT.md) for the probe ladder and portable GPU host requirements.
 See [community 3D research](COMMUNITY_3D_RESEARCH.md) for the isolated matching-driver injection experiment and the evidence behind it.
 
 ## NVIDIA 3D deployment and verification

@@ -210,6 +210,58 @@ def diagnose():
     return facts
 
 
+def legendary_install_path(app):
+    """Return an installed Epic title's directory from Legendary metadata."""
+    home = Path(os.environ.get("KAGGLE_GAMER_HOME", "/home/gamer"))
+    candidates = (
+        home / ".config/heroic/legendaryConfig/legendary/installed.json",
+        home / ".config/legendary/installed.json",
+    )
+    for installed in candidates:
+        try:
+            record = json.loads(installed.read_text(encoding="utf-8")).get(app, {})
+            path = Path(record.get("install_path") or record.get("installPath") or "")
+            if path.is_dir():
+                return path
+        except (OSError, ValueError, AttributeError):
+            continue
+    return None
+
+
+def unreal_shipping_binary(app):
+    """Find a UE Shipping executable while excluding prerequisite launchers."""
+    install = legendary_install_path(app)
+    if install is None:
+        return None
+    matches = []
+    for path in install.rglob("*-Win64-Shipping.exe"):
+        lowered = str(path).lower()
+        if "prereq" not in lowered and "redist" not in lowered and "crashreport" not in lowered:
+            matches.append(path)
+    matches.sort(key=lambda path: ("binaries\\win64" not in str(path).lower().replace("/", "\\"), len(str(path))))
+    return matches[0] if matches else None
+
+
+def configure_mouse(wine_bin, env):
+    """Apply the verified Wine DirectInput and zero-acceleration registry values."""
+    if not wine_bin:
+        return
+    values = (
+        ("HKEY_CURRENT_USER\\Software\\Wine\\DirectInput", "MouseWarpOverride", "disable"),
+        ("HKEY_CURRENT_USER\\Control Panel\\Mouse", "MouseSpeed", "0"),
+        ("HKEY_CURRENT_USER\\Control Panel\\Mouse", "MouseThreshold1", "0"),
+        ("HKEY_CURRENT_USER\\Control Panel\\Mouse", "MouseThreshold2", "0"),
+        ("HKEY_CURRENT_USER\\Control Panel\\Mouse", "MouseSensitivity", "5"),
+    )
+    for key, name, value in values:
+        try:
+            subprocess.run([wine_bin, "reg", "add", key, "/v", name, "/t", "REG_SZ",
+                            "/d", value, "/f"], env=env, check=False,
+                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=8)
+        except (OSError, subprocess.TimeoutExpired):
+            pass
+
+
 def launch(app, wine):
     facts = diagnose()
     env = clean_env()
@@ -231,20 +283,17 @@ def launch(app, wine):
             except Exception:
                 pass
 
-    # Configure DirectInput MouseWarpOverride=disable so FPS games don't spin wildly
     wine_bin = wine or shutil.which("wine")
-    if wine_bin:
-        try:
-            subprocess.run([wine_bin, "reg", "add", "HKEY_CURRENT_USER\\Software\\Wine\\DirectInput",
-                            "/v", "MouseWarpOverride", "/t", "REG_SZ", "/d", "disable", "/f"],
-                           env=env, check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        except Exception:
-            pass
+    configure_mouse(wine_bin, env)
 
     # Preserve the controller interposer for the game, not for probes.
     if os.environ.get("LD_PRELOAD"):
         env["LD_PRELOAD"] = os.environ["LD_PRELOAD"]
-    command = ["legendary", "launch", app, "--wine", wine]
+    shipping = unreal_shipping_binary(app)
+    launch_cwd = str(shipping.parent) if shipping else None
+    command = [wine_bin, str(shipping)] if shipping and wine_bin else ["legendary", "launch", app, "--wine", wine]
+    if shipping:
+        print(f"Unreal Engine Shipping binary: {shipping}", flush=True)
     if (facts["vulkan_window"] and facts["nvidia_32bit_gl"]
             and facts["vulkan_32bit_loader"] and facts["dxvk_files"]):
         try:
@@ -257,16 +306,18 @@ def launch(app, wine):
         backend = "NVIDIA Vulkan through DXVK"
         if facts["virtualgl"]:
             vgl = shutil.which("vglrun") or "/opt/VirtualGL/bin/vglrun"
-            command = ["legendary", "launch", app, "--wine", wine,
-                       "--wrapper", f"{vgl} -d {facts['virtualgl_display']}"]
+            command = ([vgl, "-d", facts["virtualgl_display"], *command] if shipping else
+                       ["legendary", "launch", app, "--wine", wine,
+                        "--wrapper", f"{vgl} -d {facts['virtualgl_display']}"])
     elif facts["direct_gl"] and facts["nvidia_32bit_gl"]:
         backend = "NVIDIA OpenGL"
     elif facts["virtualgl"] or facts["egl_device"]:
         display = facts.get("virtualgl_display") or facts.get("egl_device_display") or "egl0"
         backend = f"NVIDIA OpenGL through VirtualGL ({display})"
         vgl = shutil.which("vglrun") or "/opt/VirtualGL/bin/vglrun"
-        command = ["legendary", "launch", app, "--wine", wine,
-                   "--wrapper", f"{vgl} -d {display}"]
+        command = ([vgl, "-d", display, *command] if shipping else
+                   ["legendary", "launch", app, "--wine", wine,
+                    "--wrapper", f"{vgl} -d {display}"])
     elif os.environ.get("GAMELAB_ALLOW_SOFTWARE") == "1":
         backend = "Mesa software (explicit opt-in)"
         env["WINEDLLOVERRIDES"] = "d3d11,dxgi,d3d9,d3d10core=b;mscoree,mshtml=d"
@@ -288,11 +339,11 @@ def launch(app, wine):
         print(f"llvmpipe worker threads: {env['LP_NUM_THREADS']}", flush=True)
         previous_resolution = lower_software_resolution(env)
         try:
-            return subprocess.call(command, env=env)
+            return subprocess.call(command, env=env, cwd=launch_cwd)
         finally:
             if previous_resolution:
                 run(["xrandr", "-s", previous_resolution], env, timeout=5)
-    return subprocess.call(command, env=env)
+    return subprocess.call(command, env=env, cwd=launch_cwd)
 
 
 if __name__ == "__main__":
