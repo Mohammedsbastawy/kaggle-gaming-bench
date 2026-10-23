@@ -436,13 +436,24 @@ env.update(SELKIES_ENABLE_HTTPS='false', SELKIES_MODE='websockets',
            FILE_MANAGER_PATH=str(BUILDS),
            SDL_AUDIODRIVER='pulse')
 
-# Enforce GLX extension on Xvfb in selkies package
+# Enforce GLX extension on Xvfb in selkies package with Mesa isolation to prevent NVIDIA EGL-GBM crash
 try:
     import selkies
     s_session = Path(selkies.__file__).parent / 'session.py'
     if s_session.is_file():
         s_code = s_session.read_text(encoding='utf-8')
-        s_code = s_code.replace('for extra in gpu + [glx, ["-extension", "GLX"]]:', 'for extra in [glx]:')
+        s_target = 'for extra in gpu + [glx, ["-extension", "GLX"]]:\n            read, write = os.pipe()\n            proc = self.spawn(["Xvfb", "-displayfd", str(write), "-auth", auth, *XVFB_ARGS, *extra],\n                              pass_fds=(write,))'
+        s_target_alt = 'for extra in [glx]:\n            read, write = os.pipe()\n            proc = self.spawn(["Xvfb", "-displayfd", str(write), "-auth", auth, *XVFB_ARGS, *extra],\n                              pass_fds=(write,))'
+        s_repl = ('xvfb_env = os.environ.copy()\n'
+                  '        xvfb_env.update(LIBGL_ALWAYS_SOFTWARE="1", __GLX_VENDOR_LIBRARY_NAME="mesa", __EGL_VENDOR_LIBRARY_FILENAMES="", GBM_BACKENDS_PATH="/dev/null")\n'
+                  '        for extra in [glx]:\n'
+                  '            read, write = os.pipe()\n'
+                  '            proc = self.spawn(["Xvfb", "-displayfd", str(write), "-auth", auth, *XVFB_ARGS, *extra],\n'
+                  '                              pass_fds=(write,), env=xvfb_env)')
+        if s_target in s_code:
+            s_code = s_code.replace(s_target, s_repl)
+        elif s_target_alt in s_code:
+            s_code = s_code.replace(s_target_alt, s_repl)
         s_session.write_text(s_code, encoding='utf-8')
 except Exception:
     pass
