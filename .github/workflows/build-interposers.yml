@@ -1,0 +1,33 @@
+name: Build Selkies interposers
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Install multilib compiler
+        run: sudo apt-get update -qq && sudo apt-get install -y --no-install-recommends gcc-multilib make
+      - name: Build pinned Selkies 2.1.0 sources
+        run: |
+          git clone --depth 1 --branch 2.1.0 https://github.com/selkies-project/selkies.git selkies
+          test "$(git -C selkies rev-parse HEAD)" = 6ee68a7a815956e6745e916741f13335e0b3ff53
+          make -C selkies/addons/input-interposer all all32
+          make -C selkies/addons/fake-udev all all32
+          mkdir -p lib/x86_64-linux-gnu lib/i386-linux-gnu
+          cp selkies/addons/input-interposer/selkies_input_interposer.so lib/x86_64-linux-gnu/
+          cp selkies/addons/input-interposer/selkies_input_interposer_x86.so lib/i386-linux-gnu/selkies_input_interposer.so
+          cp selkies/addons/fake-udev/libudev.so.1 lib/x86_64-linux-gnu/selkies_fake_udev.so
+          cp selkies/addons/fake-udev/libudev_x86.so.1 lib/i386-linux-gnu/selkies_fake_udev.so
+          file lib/*/*.so
+          test "$(readelf -h lib/x86_64-linux-gnu/selkies_input_interposer.so | awk '/Class:/ {print $2}')" = ELF64
+          test "$(readelf -h lib/i386-linux-gnu/selkies_input_interposer.so | awk '/Class:/ {print $2}')" = ELF32
+          sha256sum lib/*/*.so > SHA256SUMS
+      - name: Upload binaries
+        uses: actions/upload-artifact@v4
+        with:
+          name: selkies-interposers-2.1.0-ubuntu24.04
+          path: |
+            lib
+            SHA256SUMS
