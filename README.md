@@ -71,6 +71,7 @@ Then start the Selkies session using the provided starter.
 * **Desktop 3D Graphics**: Version 28 exposes compute and NVENC, but its observed NVIDIA OpenGL and Vulkan probes fail; Xvfb renders through llvmpipe. The launcher refuses an unaccelerated game launch by default. `GAMELAB_ALLOW_SOFTWARE=1` opts into a CPU profile for light games and basic tests; it cannot make modern AAA games playable.
 
 See [GPU deployment and CPU fallback](GPU_DEPLOYMENT.md) for the Version 28 diagnosis, one final headless EGL test, and portable GPU host requirements.
+See [community 3D research](COMMUNITY_3D_RESEARCH.md) for the isolated matching-driver injection experiment and the evidence behind it.
 
 ## NVIDIA 3D deployment and verification
 

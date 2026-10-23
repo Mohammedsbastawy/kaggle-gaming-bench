@@ -11,6 +11,7 @@ auto_optimize_code = (root / 'auto_optimize.py').read_text(encoding='utf-8')
 setup_sh_code = (root / 'setup.sh').read_text(encoding='utf-8')
 gpu_runtime_code = (root / 'gpu_runtime.py').read_text(encoding='utf-8')
 gpu_xorg_code = (root / 'gpu_xorg.sh').read_text(encoding='utf-8')
+probe_nvidia_userspace_code = (root / 'probe_nvidia_userspace.sh').read_text(encoding='utf-8')
 start_desktop_code = (root / 'start_desktop.sh').read_text(encoding='utf-8')
 launch_heroic_code = (root / 'launch_heroic.sh').read_text(encoding='utf-8')
 fix_heroic_sh_code = (root / 'fix_heroic.sh').read_text(encoding='utf-8')
@@ -286,6 +287,7 @@ fix_heroic_sh = {repr(fix_heroic_sh_code)}
 (BENCH / 'legendary_gui.py').write_text({repr(legendary_gui_code)}, encoding='utf-8')
 (BENCH / 'gpu_runtime.py').write_text({repr(gpu_runtime_code)}, encoding='utf-8')
 (BENCH / 'gpu_xorg.sh').write_text({repr(gpu_xorg_code)}, encoding='utf-8')
+(BENCH / 'probe_nvidia_userspace.sh').write_text({repr(probe_nvidia_userspace_code)}, encoding='utf-8')
 
 legendary_sh = """#!/bin/bash
 export DISPLAY="${{DISPLAY:-:0}}"

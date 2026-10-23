@@ -1,4 +1,6 @@
 import os
+from pathlib import Path
+import tempfile
 import unittest
 from unittest.mock import patch
 
@@ -32,6 +34,16 @@ class RuntimeTests(unittest.TestCase):
                  (0, "egl0\negl1\n"), (0, software), (0, tesla)]):
             self.assertEqual(gpu_runtime.egl_device_probe({}),
                              (True, "OpenGL renderer string: Tesla T4/PCIe/SSE2", "egl1"))
+
+    def test_private_32bit_driver_is_checked_by_elf_class(self):
+        with tempfile.TemporaryDirectory() as directory:
+            library = Path(directory) / "libGLX_nvidia.so.0"
+            library.write_bytes(b"\x7fELF\x01mock")
+            with patch.dict(os.environ, {"GAMELAB_NVIDIA_LIB32": directory}):
+                self.assertTrue(gpu_runtime.has_32bit_library(library.name))
+                library.write_bytes(b"\x7fELF\x02mock")
+                with patch.object(gpu_runtime, "run", return_value=(1, "")):
+                    self.assertFalse(gpu_runtime.has_32bit_library(library.name))
 
 
 if __name__ == "__main__":

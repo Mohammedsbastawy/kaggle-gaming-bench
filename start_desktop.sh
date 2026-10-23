@@ -6,6 +6,17 @@ export SDL_JOYSTICK_DISABLE_UDEV=1
 export SDL_JOYSTICK_DEVICE=/dev/input/event1000:/dev/input/event1001:/dev/input/event1002:/dev/input/event1003
 export DISPLAY="${DISPLAY:-:0}"
 export PATH="/usr/games:/usr/local/bin:/usr/bin:$PATH"
+
+# Opt-in only after the isolated probe confirms an NVIDIA EGL renderer.
+if [ "${GAMELAB_USE_INJECTED_DRIVER:-0}" = 1 ]; then
+    probe_env=/tmp/kaggle-game-dev-bench/nvidia-userspace-probe/env.sh
+    if [ -f "$probe_env" ]; then
+        # shellcheck disable=SC1090
+        . "$probe_env"
+    else
+        echo "Requested injected driver, but $probe_env is absent" >&2
+    fi
+fi
 printf '%s' "${XAUTHORITY:-}" > /tmp/kaggle-game-dev-bench/xauthority-path
 printf '%s' "${PULSE_SERVER:-}" > /tmp/kaggle-game-dev-bench/pulse-server-path
 
@@ -58,6 +69,10 @@ if [ "$(id -u)" -eq 0 ]; then
         GAMELAB_ALLOW_SOFTWARE="${GAMELAB_ALLOW_SOFTWARE:-0}" \
         GAMELAB_SOFTWARE_RESOLUTION="${GAMELAB_SOFTWARE_RESOLUTION:-854x480}" \
         LP_NUM_THREADS="${LP_NUM_THREADS:-}" \
+        LD_LIBRARY_PATH="${LD_LIBRARY_PATH:-}" \
+        __EGL_VENDOR_LIBRARY_FILENAMES="${__EGL_VENDOR_LIBRARY_FILENAMES:-}" \
+        VK_DRIVER_FILES="${VK_DRIVER_FILES:-}" VK_ICD_FILENAMES="${VK_ICD_FILENAMES:-}" \
+        GAMELAB_NVIDIA_LIB32="${GAMELAB_NVIDIA_LIB32:-}" \
         LD_PRELOAD="$LD_PRELOAD" SDL_JOYSTICK_DISABLE_UDEV=1 \
         SDL_JOYSTICK_DEVICE="$SDL_JOYSTICK_DEVICE" \
         dbus-run-session -- /usr/bin/env python3 /tmp/kaggle-game-dev-bench/dev_launcher.py

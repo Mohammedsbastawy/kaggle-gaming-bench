@@ -96,7 +96,9 @@ if [ -c /dev/nvidia-modeset ] && [ -c /dev/nvidia0 ]; then
     apt_install "NVIDIA Xorg server support" xserver-xorg-core
 fi
 
-if [ -c /dev/nvidiactl ] && { [ -f /etc/vulkan/icd.d/nvidia_icd.json ] || [ -f /usr/share/vulkan/icd.d/nvidia_icd.json ]; }; then
+if [ -c /dev/nvidiactl ] && { [ -f /etc/vulkan/icd.d/nvidia_icd.json ] || \
+     [ -f /usr/share/vulkan/icd.d/nvidia_icd.json ] || \
+     { [ -n "${VK_DRIVER_FILES:-}" ] && [ -f "$VK_DRIVER_FILES" ]; }; }; then
     DXVK_TAR=/tmp/dxvk-2.6.2.tar.gz
     wget -q https://github.com/doitsujin/dxvk/releases/download/v2.6.2/dxvk-2.6.2.tar.gz -O "$DXVK_TAR" || true
     if echo '17761876556afd55736cb895d184f5a1c55d43350f1b1e3b129f8d28706d7992  /tmp/dxvk-2.6.2.tar.gz' | sha256sum -c -; then

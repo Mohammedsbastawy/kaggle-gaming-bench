@@ -46,7 +46,8 @@ first and retest `eglinfo`, GLX, Vulkan, and NVENC after installation. Installin
 matching implementation libraries cannot create GPU rendering. Never install
 an NVIDIA kernel driver inside the notebook container. The host's container
 runtime controls device and library exposure, so a failed EGL device probe
-should end GPU attempts in that Kaggle session.
+should end GPU attempts in that Kaggle session **after** the matching
+userspace experiment in [community 3D research](COMMUNITY_3D_RESEARCH.md).
 
 ## Explicit CPU mode
 

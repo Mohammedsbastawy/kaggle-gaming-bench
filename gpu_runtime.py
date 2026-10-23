@@ -43,6 +43,15 @@ def nvidia_renderer(output):
 
 
 def has_32bit_library(name):
+    injected = os.environ.get("GAMELAB_NVIDIA_LIB32", "")
+    if injected:
+        candidate = Path(injected) / name
+        try:
+            with candidate.open("rb") as library:
+                if library.read(5) == b"\x7fELF\x01":
+                    return True
+        except OSError:
+            pass
     rc, out = run(["ldconfig", "-p"], timeout=4)
     return rc == 0 and any(f"{name} (libc6)" in line
                            for line in out.splitlines())
@@ -161,7 +170,9 @@ def diagnose():
         "nvidia_modeset": Path("/dev/nvidia-modeset").exists(),
         "nvidia_icd": any(Path(p).exists() for p in (
             "/etc/vulkan/icd.d/nvidia_icd.json",
-            "/usr/share/vulkan/icd.d/nvidia_icd.json")),
+            "/usr/share/vulkan/icd.d/nvidia_icd.json")) or any(
+                Path(p).is_file() and "nvidia" in Path(p).name.lower()
+                for p in (env.get("VK_DRIVER_FILES") or env.get("VK_ICD_FILENAMES") or "").split(":") if p),
         "direct_gl": False, "virtualgl": False, "virtualgl_display": "",
         "vulkan_device": False,
         "vulkan_window": False,
