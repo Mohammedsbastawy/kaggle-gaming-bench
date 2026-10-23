@@ -419,6 +419,12 @@ class LegendaryApp(tk.Tk):
         env["HOME"] = "/home/gamer"
         env["WINEPREFIX"] = str(HOME / ".wine")
 
+        # Complete 32-bit and 64-bit OpenGL & Mesa fallback
+        env["LD_LIBRARY_PATH"] = f"/usr/lib/i386-linux-gnu:/usr/lib/x86_64-linux-gnu:{env.get('LD_LIBRARY_PATH', '')}"
+        env["LIBGL_DRIVERS_PATH"] = "/usr/lib/i386-linux-gnu/dri:/usr/lib/x86_64-linux-gnu/dri"
+        env["LIBGL_ALWAYS_SOFTWARE"] = "1"
+        env["MESA_LOADER_DRIVER_OVERRIDE"] = "llvmpipe"
+
         # Automatically verify and heal Wine prefix before launch if kernel32.dll is missing
         kernel32 = HOME / ".wine/drive_c/windows/system32/kernel32.dll"
         if not kernel32.is_file():

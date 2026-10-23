@@ -65,9 +65,13 @@ apt_install "core desktop" \
 apt_install "build tools" git make gcc
 apt-get install -y --no-install-recommends -o DPkg::Lock::Timeout=120 gcc-multilib 2>/dev/null || true
 
-# 4. Wine and 32-bit graphics runtime
+# 4. Wine and complete 32-bit/64-bit graphics runtime
 apt_install "wine runtime" wine wine64 winbind
-apt-get install -y --no-install-recommends -o DPkg::Lock::Timeout=120 wine32:i386 libgl1-mesa-dri:i386 2>/dev/null || true
+apt_install "32-bit graphics runtime" \
+    wine32:i386 libgl1:i386 libglx0:i386 libglx-mesa0:i386 libgl1-mesa-dri:i386 \
+    mesa-vulkan-drivers:i386 libx11-6:i386 libxext6:i386 libxfixes3:i386 \
+    libxcomposite1:i386 libxrandr2:i386 libxinerama1:i386 libxi6:i386 libasound2:i386 \
+    libpulse0:i386 libgnutls30:i386 libvulkan1:i386
 
 # 5. Extra libraries for Lutris and Wine Gecko
 apt_install "extra libraries" python3-tk python3.12 python3-dbus python3-gi python3-yaml python3-lxml python3-requests python3-pil
