@@ -6,6 +6,7 @@ root = Path(__file__).parent
 launcher_code = (root / 'dev_launcher.py').read_text(encoding='utf-8')
 fix_heroic_code = (root / 'fix_heroic_config.py').read_text(encoding='utf-8')
 legendary_menu_code = (root / 'legendary_menu.sh').read_text(encoding='utf-8')
+setup_sh_code = (root / 'setup.sh').read_text(encoding='utf-8')
 
 install_script = r'''from pathlib import Path
 import json, os, shutil, subprocess, sys, time
@@ -16,9 +17,7 @@ LOGS = BENCH / 'logs'
 EA_STORE = Path('/tmp/ea-store')
 REPO_URL = 'https://github.com/Mohammedsbastawy/kaggle-gaming-bench.git'
 
-BENCH.mkdir(parents=True, exist_ok=True)
 BUILDS.mkdir(parents=True, exist_ok=True)
-LOGS.mkdir(parents=True, exist_ok=True)
 EA_STORE.mkdir(parents=True, exist_ok=True)
 
 # 1. Automatic recovery for apt/dpkg locks (prevents RuntimeError exit 100 on interactive sessions)
@@ -32,29 +31,27 @@ for lock in ['/var/lib/dpkg/lock-frontend', '/var/lib/dpkg/lock', '/var/lib/apt/
 subprocess.run(['dpkg', '--configure', '-a'], check=False, env=dict(os.environ, DEBIAN_FRONTEND='noninteractive'))
 
 # 2. Clone or update the ready Git repository
-cloned_ok = False
-try:
-    if not (BENCH / 'setup.sh').exists():
-        print(f'▶ Cloning ready gaming bench suite from {REPO_URL}...', flush=True)
-        res = subprocess.run(['git', 'clone', '--depth', '1', REPO_URL, str(BENCH)], timeout=60)
-        cloned_ok = (res.returncode == 0)
-    else:
-        print('▶ Updating bench repository from git...', flush=True)
-        subprocess.run(['git', '-C', str(BENCH), 'pull'], check=False, timeout=30)
-        cloned_ok = True
-except Exception as e:
-    print(f'Notice: Git clone skipped ({e}), falling back to inline setup.', flush=True)
-
-# 3. If setup.sh is present, run it with live output streaming
 setup_sh = BENCH / 'setup.sh'
-if setup_sh.exists():
-    setup_sh.chmod(0o755)
-    print('▶ Running automated setup.sh from repository...', flush=True)
-    proc = subprocess.Popen(['/bin/bash', str(setup_sh)], stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1)
-    for line in proc.stdout:
-        print(line, end='', flush=True)
-    proc.wait()
-    print(f'setup.sh completed with exit code: {proc.returncode}', flush=True)
+if not setup_sh.exists():
+    shutil.rmtree(str(BENCH), ignore_errors=True)
+    print(f'▶ Cloning ready gaming bench suite from {REPO_URL}...', flush=True)
+    res = subprocess.run(['git', 'clone', '--depth', '1', REPO_URL, str(BENCH)], timeout=60)
+    if res.returncode != 0 or not setup_sh.exists():
+        print('Notice: Git clone unavailable, using embedded setup suite.', flush=True)
+        BENCH.mkdir(parents=True, exist_ok=True)
+        setup_sh.write_text(''' + repr(setup_sh_code) + r''', encoding='utf-8')
+else:
+    print('▶ Updating bench repository from git...', flush=True)
+    subprocess.run(['git', '-C', str(BENCH), 'pull'], check=False, timeout=30)
+
+# 3. Execute setup.sh with live output streaming
+setup_sh.chmod(0o755)
+print('▶ Running automated setup.sh...', flush=True)
+proc = subprocess.Popen(['/bin/bash', str(setup_sh)], stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1)
+for line in proc.stdout:
+    print(line, end='', flush=True)
+proc.wait()
+print(f'setup.sh completed with exit code: {proc.returncode}', flush=True)
 
 # 4. Configure unprivileged gamer user
 subprocess.run(['useradd', '-m', '-s', '/bin/bash', '-G', 'audio,video', 'gamer'], check=False)
@@ -388,7 +385,7 @@ if pidfile.exists():
         pass
 
 env = os.environ.copy()
-env['PATH'] = f"/usr/games:/usr/local/bin:/usr/bin:{env.get('PATH', '')}"
+env['PATH'] = f"/usr/local/bin:/usr/games:/usr/bin:{env.get('PATH', '')}"
 env.update(SELKIES_ENABLE_HTTPS='false', SELKIES_MODE='websockets',
            SELKIES_ALLOWED_ORIGINS='https://kkb-production.jupyter-proxy.kaggle.net',
            SELKIES_ENCODER='h264enc', SELKIES_FRAMERATE='60',
