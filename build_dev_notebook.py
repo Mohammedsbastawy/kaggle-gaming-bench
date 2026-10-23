@@ -44,7 +44,9 @@ if not setup_sh.exists():
         setup_sh.write_text(''' + repr(setup_sh_code) + r''', encoding='utf-8')
 else:
     print('▶ Updating bench repository from git...', flush=True)
-    subprocess.run(['git', '-C', str(BENCH), 'pull'], check=False, timeout=30)
+    subprocess.run(['git', '-C', str(BENCH), 'reset', '--hard', 'HEAD'], check=False, timeout=30)
+    subprocess.run(['git', '-C', str(BENCH), 'clean', '-fd'], check=False, timeout=30)
+    subprocess.run(['git', '-C', str(BENCH), 'pull', '--force'], check=False, timeout=30)
 
 # 3. Execute setup.sh with live output streaming
 setup_sh.chmod(0o755)
