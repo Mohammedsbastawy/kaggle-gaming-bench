@@ -425,6 +425,14 @@ class LegendaryApp(tk.Tk):
         env["LIBGL_ALWAYS_SOFTWARE"] = "1"
         env["MESA_LOADER_DRIVER_OVERRIDE"] = "llvmpipe"
 
+        # Max Multi-threading & GPU/CPU performance boost
+        env["LP_NUM_THREADS"] = "4"
+        env["GALLIUM_DRIVER"] = "llvmpipe"
+        env["WINE_D3D_CONFIG"] = "csmt=3;max_sm_vs=5;max_sm_ps=5"
+        env["MESA_GL_VERSION_OVERRIDE"] = "4.5"
+        env["__GL_SYNC_TO_VBLANK"] = "0"
+        env["vblank_mode"] = "0"
+
         # Automatically verify and heal Wine prefix before launch if kernel32.dll is missing
         kernel32 = HOME / ".wine/drive_c/windows/system32/kernel32.dll"
         if not kernel32.is_file():
