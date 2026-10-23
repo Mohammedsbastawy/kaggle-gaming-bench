@@ -128,6 +128,14 @@ if [ ! -d "$WINE_GE_DIR/Wine-GE-Proton8-26" ] && [ ! -d "$WINE_GE_DIR/lutris-GE-
                 ln -sf "$extracted" "$WINE_GE_DIR/Wine-GE-Proton8-26" || true
                 mkdir -p "/home/gamer/.local/share/lutris/runners/wine"
                 ln -sf "$extracted" "/home/gamer/.local/share/lutris/runners/wine/Wine-GE-Proton8-26" || true
+                if [ ! -f /usr/bin/wine ]; then
+                    ln -sf "$extracted/bin/wine" /usr/bin/wine || true
+                    ln -sf "$extracted/bin/wineserver" /usr/bin/wineserver || true
+                    ln -sf "$extracted/bin/wineboot" /usr/bin/wineboot || true
+                fi
+                if [ ! -f /usr/local/bin/wine ]; then
+                    ln -sf "$extracted/bin/wine" /usr/local/bin/wine || true
+                fi
                 break
             fi
         done

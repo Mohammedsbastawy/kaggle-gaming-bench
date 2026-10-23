@@ -15,6 +15,21 @@ chmod 777 "$XDG_RUNTIME_DIR" 2>/dev/null || true
 chmod -R 777 "$XDG_RUNTIME_DIR/pulse" 2>/dev/null || true
 chmod -R 777 /tmp/kaggle-game-dev-bench 2>/dev/null || true
 
+# Ensure /usr/bin/wine exists by symlinking Wine-GE if system wine is absent
+for w_candidate in /home/gamer/.config/heroic/tools/wine/*/bin/wine; do
+    if [ -f "$w_candidate" ]; then
+        if [ ! -f /usr/bin/wine ]; then
+            ln -sf "$w_candidate" /usr/bin/wine 2>/dev/null || true
+            ln -sf "$(dirname "$w_candidate")/wineserver" /usr/bin/wineserver 2>/dev/null || true
+            ln -sf "$(dirname "$w_candidate")/wineboot" /usr/bin/wineboot 2>/dev/null || true
+        fi
+        if [ ! -f /usr/local/bin/wine ]; then
+            ln -sf "$w_candidate" /usr/local/bin/wine 2>/dev/null || true
+        fi
+        break
+    fi
+done
+
 # Start Openbox window manager in background for window frames, moving & resizing
 openbox &
 

@@ -49,14 +49,23 @@ while true; do
             echo ""
             read -p "Enter Game App Name (from the list above): " appname
             if [ -n "$appname" ]; then
-                WINE_BIN="/usr/bin/wine"
-                if [ -x "/home/gamer/.config/heroic/tools/wine/Wine-GE-Proton8-26/bin/wine" ]; then
-                    WINE_BIN="/home/gamer/.config/heroic/tools/wine/Wine-GE-Proton8-26/bin/wine"
+                WINE_BIN=""
+                for candidate in "/home/gamer/.config/heroic/tools/wine/Wine-GE-Proton8-26/bin/wine" \
+                                 /home/gamer/.config/heroic/tools/wine/*/bin/wine \
+                                 /usr/bin/wine /usr/local/bin/wine /usr/games/wine; do
+                    if [ -f "$candidate" ] && [ -x "$candidate" ]; then
+                        WINE_BIN="$candidate"
+                        break
+                    fi
+                done
+                if [ -z "$WINE_BIN" ]; then
+                    echo "Error: No Wine runner found on system!"
+                else
+                    echo "Launching $appname via WineD3D using runner: $WINE_BIN"
+                    export WINEDLLOVERRIDES="d3d11,dxgi,d3d9,d3d10core=b"
+                    legendary launch "$appname" --wine "$WINE_BIN" 2>&1 | tee -a /home/gamer/logs/legendary-game.log
+                    echo "Legendary exit status: ${PIPESTATUS[0]}" | tee -a /home/gamer/logs/legendary-game.log
                 fi
-                echo "Launching $appname via WineD3D using runner: $WINE_BIN"
-                export WINEDLLOVERRIDES="d3d11,dxgi,d3d9,d3d10core=b"
-                legendary launch "$appname" --wine "$WINE_BIN" 2>&1 | tee -a /home/gamer/logs/legendary-game.log
-                echo "Legendary exit status: ${PIPESTATUS[0]}" | tee -a /home/gamer/logs/legendary-game.log
             fi
             read -p "Press Enter to return to menu..."
             ;;
@@ -125,11 +134,16 @@ while true; do
             legendary list-installed
             read -p "Enter Game App Name: " appname
             if [ -n "$appname" ]; then
-                WINE_BIN="/usr/bin/wine"
-                if [ -x "/home/gamer/.config/heroic/tools/wine/Wine-GE-Proton8-26/bin/wine" ]; then
-                    WINE_BIN="/home/gamer/.config/heroic/tools/wine/Wine-GE-Proton8-26/bin/wine"
-                fi
-                legendary launch "$appname" --wine "$WINE_BIN" --dry-run 2>&1 | tee -a /home/gamer/logs/legendary-dry-run.log
+                WINE_BIN=""
+                for candidate in "/home/gamer/.config/heroic/tools/wine/Wine-GE-Proton8-26/bin/wine" \
+                                 /home/gamer/.config/heroic/tools/wine/*/bin/wine \
+                                 /usr/bin/wine /usr/local/bin/wine /usr/games/wine; do
+                    if [ -f "$candidate" ] && [ -x "$candidate" ]; then
+                        WINE_BIN="$candidate"
+                        break
+                    fi
+                done
+                legendary launch "$appname" --wine "${WINE_BIN:-wine}" --dry-run 2>&1 | tee -a /home/gamer/logs/legendary-dry-run.log
                 echo "Legendary dry-run exit status: ${PIPESTATUS[0]}" | tee -a /home/gamer/logs/legendary-dry-run.log
             fi
             read -p "Press Enter to return to menu..."
