@@ -58,7 +58,7 @@ apt-get update -o DPkg::Lock::Timeout=120 -qq || true
 # 3. Core desktop, X11, and audio utilities
 apt_install "core desktop" \
     xvfb openbox tint2 xterm pulseaudio pulseaudio-utils xauth dbus-x11 \
-    libgl1-mesa-dri libgbm1 libpixman-1-0 libxkbcommon0 mesa-utils x11-utils \
+    libgl1-mesa-dri libgbm1 libpixman-1-0 libxkbcommon0 mesa-utils x11-utils vulkan-tools \
     xdotool wmctrl wget curl cabextract p7zip-full
 
 # Build tools (isolated so multilib issues don't block core)
@@ -72,6 +72,40 @@ apt_install "32-bit graphics runtime" \
     mesa-vulkan-drivers:i386 libx11-6:i386 libxext6:i386 libxfixes3:i386 \
     libxcomposite1:i386 libxrandr2:i386 libxinerama1:i386 libxi6:i386 libasound2:i386 \
     libpulse0:i386 libgnutls30:i386 libvulkan1:i386
+
+# GPU graphics/display components must be mounted by the host when the container
+# is created. Never install a second NVIDIA kernel driver or fabricate an ICD.
+# VirtualGL supplies both 64- and 32-bit OpenGL interposers on capable hosts.
+if [ -c /dev/nvidiactl ] && [ -c /dev/nvidia0 ]; then
+    if ! [ -x /opt/VirtualGL/bin/vglrun ]; then
+        VGL64=/tmp/virtualgl_3.1.5_amd64.deb
+        VGL32=/tmp/virtualgl32_3.1.5_amd64.deb
+        wget -q https://github.com/VirtualGL/virtualgl/releases/download/3.1.5/virtualgl_3.1.5_amd64.deb -O "$VGL64" || true
+        wget -q https://github.com/VirtualGL/virtualgl/releases/download/3.1.5/virtualgl32_3.1.5_amd64.deb -O "$VGL32" || true
+        if echo 'df3f7788ce41b182a47c0d298e5cd6d2d63579522cb41825970b7726e825485e  /tmp/virtualgl_3.1.5_amd64.deb' | sha256sum -c - && \
+           echo '7dc63ecb47d7ab9cb486bb21a9a968dee853380da760cc7f36f616d09ec62b9e  /tmp/virtualgl32_3.1.5_amd64.deb' | sha256sum -c -; then
+            apt-get install -y --no-install-recommends "$VGL64" "$VGL32" || true
+        else
+            echo 'VirtualGL download or checksum failed; GPU GL bridge unavailable.'
+        fi
+    fi
+else
+    echo 'NVIDIA GPU devices unavailable; GPU 3D cannot be enabled inside this container.'
+fi
+if [ -c /dev/nvidia-modeset ] && [ -c /dev/nvidia0 ]; then
+    apt_install "NVIDIA Xorg server support" xserver-xorg-core
+fi
+
+if [ -c /dev/nvidiactl ] && { [ -f /etc/vulkan/icd.d/nvidia_icd.json ] || [ -f /usr/share/vulkan/icd.d/nvidia_icd.json ]; }; then
+    DXVK_TAR=/tmp/dxvk-2.6.2.tar.gz
+    wget -q https://github.com/doitsujin/dxvk/releases/download/v2.6.2/dxvk-2.6.2.tar.gz -O "$DXVK_TAR" || true
+    if echo '17761876556afd55736cb895d184f5a1c55d43350f1b1e3b129f8d28706d7992  /tmp/dxvk-2.6.2.tar.gz' | sha256sum -c -; then
+        mkdir -p /opt/gamelab-dxvk
+        tar -xzf "$DXVK_TAR" -C /opt/gamelab-dxvk
+    else
+        echo 'DXVK download or checksum failed; DXVK unavailable.'
+    fi
+fi
 
 # 5. Extra libraries for Lutris and Wine Gecko
 apt_install "extra libraries" python3-tk python3.12 python3-dbus python3-gi python3-yaml python3-lxml python3-requests python3-pil

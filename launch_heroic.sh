@@ -22,7 +22,17 @@ chown -R gamer:gamer /home/gamer 2>/dev/null || true
 chmod -R u+rwX /home/gamer 2>/dev/null || true
 
 echo "Starting Heroic as user gamer at $(date)..." >> "$LOG"
-exec runuser -u gamer -- env \
+HEROIC_PREFIX=()
+VGL_TARGET=$(PYTHONPATH=/tmp/kaggle-game-dev-bench python3 -c 'from gpu_runtime import diagnose; d=diagnose(); print(d["virtualgl_display"] if d["virtualgl"] and d["nvidia_32bit_gl"] else "")' 2>/dev/null)
+if [ -n "$VGL_TARGET" ]; then
+    HEROIC_PREFIX=(/opt/VirtualGL/bin/vglrun -d "$VGL_TARGET")
+fi
+if [ "$(id -u)" -eq 0 ]; then
+    USER_PREFIX=(runuser -u gamer --)
+else
+    USER_PREFIX=()
+fi
+exec "${USER_PREFIX[@]}" env \
     DISPLAY="$DISPLAY" \
     PATH="$PATH" \
     SDL_AUDIODRIVER=pulse \
@@ -31,4 +41,4 @@ exec runuser -u gamer -- env \
     SDL_JOYSTICK_DISABLE_UDEV=1 \
     SDL_JOYSTICK_DEVICE="$SDL_JOYSTICK_DEVICE" \
     HOME="/home/gamer" \
-    "$HEROIC_BIN" --no-sandbox --disable-gpu --disable-gpu-compositing "$@" >> "$LOG" 2>&1
+    "${HEROIC_PREFIX[@]}" "$HEROIC_BIN" --no-sandbox --disable-gpu --disable-gpu-compositing "$@" >> "$LOG" 2>&1

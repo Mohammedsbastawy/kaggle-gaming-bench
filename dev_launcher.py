@@ -404,7 +404,7 @@ while running:
     # Status pills in header
     pills = [
         ('T4 NVENC  •  H.264', GREEN),
-        ('3D  •  llvmpipe', YELLOW),
+        ('3D  •  GPU probe', YELLOW),
         ('AUDIO  •  OPUS', GREEN),
         ('SESSION  •  gamer', GREEN)
     ]
@@ -493,7 +493,7 @@ while running:
     compat_rect = pygame.Rect(550, desc_y, 680, 52)
     pygame.draw.rect(screen, (13, 20, 35), compat_rect, border_radius=6)
     screen.blit(font_small.render(cur['compat'][:95], True, YELLOW), (560, desc_y + 8))
-    screen.blit(font_small.render('T4 NVENC captures screen. Games requiring hardware Vulkan/DXVK will fail without ICD.', True, TEXT_MUTED), (560, desc_y + 28))
+    screen.blit(font_small.render('T4 NVENC streams video. Game launch checks NVIDIA 3D rendering separately.', True, TEXT_MUTED), (560, desc_y + 28))
     desc_y += 64
 
     # Log tail

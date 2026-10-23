@@ -9,6 +9,11 @@ legendary_menu_code = (root / 'legendary_menu.sh').read_text(encoding='utf-8')
 legendary_gui_code = (root / 'legendary_gui.py').read_text(encoding='utf-8')
 auto_optimize_code = (root / 'auto_optimize.py').read_text(encoding='utf-8')
 setup_sh_code = (root / 'setup.sh').read_text(encoding='utf-8')
+gpu_runtime_code = (root / 'gpu_runtime.py').read_text(encoding='utf-8')
+gpu_xorg_code = (root / 'gpu_xorg.sh').read_text(encoding='utf-8')
+start_desktop_code = (root / 'start_desktop.sh').read_text(encoding='utf-8')
+launch_heroic_code = (root / 'launch_heroic.sh').read_text(encoding='utf-8')
+fix_heroic_sh_code = (root / 'fix_heroic.sh').read_text(encoding='utf-8')
 
 install_script = r'''from pathlib import Path
 import json, os, shutil, subprocess, sys, time
@@ -47,6 +52,10 @@ else:
     subprocess.run(['git', '-C', str(BENCH), 'reset', '--hard', 'HEAD'], check=False, timeout=30)
     subprocess.run(['git', '-C', str(BENCH), 'clean', '-fd'], check=False, timeout=30)
     subprocess.run(['git', '-C', str(BENCH), 'pull', '--force'], check=False, timeout=30)
+
+# Use the setup bundled with this notebook, including its GPU driver probes.
+# The public repository can lag behind a newly uploaded notebook version.
+setup_sh.write_text(''' + repr(setup_sh_code) + r''', encoding='utf-8')
 
 # 3. Execute setup.sh with live output streaming
 setup_sh.chmod(0o755)
@@ -178,34 +187,7 @@ exec env \\
 (BENCH / 'launch_steam.sh').write_text(steam_sh, encoding='utf-8')
 
 # Heroic launch wrapper (Epic Games & GOG) - executes under unprivileged 'gamer' user
-heroic_sh = """#!/bin/bash
-export DISPLAY="${{DISPLAY:-:0}}"
-export PATH="/usr/games:/usr/local/bin:/usr/bin:$PATH"
-export SDL_AUDIODRIVER=pulse
-export LD_PRELOAD='/tmp/kaggle-game-dev-bench/$LIB/selkies_input_interposer.so:/tmp/kaggle-game-dev-bench/$LIB/selkies_fake_udev.so'
-export SELKIES_JS_SOCKET_PATH="$XDG_RUNTIME_DIR"
-export SDL_JOYSTICK_DISABLE_UDEV=1
-export SDL_JOYSTICK_DEVICE=/dev/input/event1000:/dev/input/event1001:/dev/input/event1002:/dev/input/event1003
-
-mkdir -p /home/gamer/logs
-LOG="/home/gamer/logs/heroic.log"
-HEROIC_BIN=$(which heroic 2>/dev/null || echo /usr/bin/heroic)
-
-# Repair settings with backups and leave existing Wine prefixes intact.
-python3 /tmp/kaggle-game-dev-bench/fix_heroic_config.py >> "$LOG" 2>&1
-
-echo "Starting Heroic as user gamer at $(date)..." >> "$LOG"
-exec env \\
-    DISPLAY="$DISPLAY" \\
-    PATH="$PATH" \\
-    SDL_AUDIODRIVER=pulse \\
-    LD_PRELOAD="$LD_PRELOAD" \\
-    SELKIES_JS_SOCKET_PATH="$SELKIES_JS_SOCKET_PATH" \\
-    SDL_JOYSTICK_DISABLE_UDEV=1 \\
-    SDL_JOYSTICK_DEVICE="$SDL_JOYSTICK_DEVICE" \\
-    HOME="/home/gamer" \\
-    "$HEROIC_BIN" --no-sandbox --disable-gpu --disable-gpu-compositing "$@" >> "$LOG" 2>&1
-"""
+heroic_sh = {repr(launch_heroic_code)}
 (BENCH / 'launch_heroic.sh').write_text(heroic_sh, encoding='utf-8')
 
 # Minigalaxy launch wrapper (GOG dedicated) - executes under unprivileged 'gamer' user
@@ -296,18 +278,14 @@ exec env \\
 (BENCH / 'fix_heroic_config.py').write_text({repr(fix_heroic_code)}, encoding='utf-8')
 
 # Fix Heroic Shell wrapper for launcher
-fix_heroic_sh = """#!/bin/bash
-export DISPLAY="${{DISPLAY:-:0}}"
-export PATH="/usr/games:/usr/local/bin:/usr/bin:$PATH"
-mkdir -p /home/gamer/logs
-LOG="/home/gamer/logs/heroic_fix.log"
-exec xterm -geometry 95x25 -title "Heroic Config Sanitizer" -e bash -c "echo '=== Sanitizing Heroic Settings & Prefixes ===' | tee -a '$LOG'; python3 /tmp/kaggle-game-dev-bench/fix_heroic_config.py 2>&1 | tee -a '$LOG'; chown -R gamer:gamer /home/gamer 2>/dev/null || true; chmod -R u+rwX /home/gamer 2>/dev/null || true; echo ''; echo 'Sanitization complete! All games configured for WineD3D.'; echo ''; read -p 'Press Enter to close window...'"
-"""
+fix_heroic_sh = {repr(fix_heroic_sh_code)}
 (BENCH / 'fix_heroic.sh').write_text(fix_heroic_sh, encoding='utf-8')
 
 # Legendary interactive menu and graphical interface
 (BENCH / 'legendary_menu.sh').write_text({repr(legendary_menu_code)}, encoding='utf-8')
 (BENCH / 'legendary_gui.py').write_text({repr(legendary_gui_code)}, encoding='utf-8')
+(BENCH / 'gpu_runtime.py').write_text({repr(gpu_runtime_code)}, encoding='utf-8')
+(BENCH / 'gpu_xorg.sh').write_text({repr(gpu_xorg_code)}, encoding='utf-8')
 
 legendary_sh = """#!/bin/bash
 export DISPLAY="${{DISPLAY:-:0}}"
@@ -380,47 +358,7 @@ SCREENSHOTS.mkdir(parents=True, exist_ok=True)
 
 # Master desktop session wrapper
 wrapper = BENCH / 'start-desktop.sh'
-wrapper.write_text(''' + "'''" + r'''#!/bin/bash
-export LD_PRELOAD='/tmp/kaggle-game-dev-bench/$LIB/selkies_input_interposer.so:/tmp/kaggle-game-dev-bench/$LIB/selkies_fake_udev.so'
-export SDL_AUDIODRIVER=pulse
-export SELKIES_JS_SOCKET_PATH="$XDG_RUNTIME_DIR"
-export SDL_JOYSTICK_DISABLE_UDEV=1
-export SDL_JOYSTICK_DEVICE=/dev/input/event1000:/dev/input/event1001:/dev/input/event1002:/dev/input/event1003
-export DISPLAY="${DISPLAY:-:0}"
-export PATH="/usr/games:/usr/local/bin:/usr/bin:$PATH"
-printf '%s' "$XAUTHORITY" > /tmp/kaggle-game-dev-bench/xauthority-path
-printf '%s' "$PULSE_SERVER" > /tmp/kaggle-game-dev-bench/pulse-server-path
-
-# Share the session PulseAudio server with the unprivileged desktop user.
-install -d -o gamer -g gamer -m 700 /home/gamer/.config/pulse
-if [ -f "$HOME/.config/pulse/cookie" ]; then
-    install -o gamer -g gamer -m 600 "$HOME/.config/pulse/cookie" /home/gamer/.config/pulse/cookie
-fi
-
-# Grant unprivileged gamer user access to X11 display
-echo "X11 authorization: $(xhost +si:localuser:gamer 2>&1)"
-
-# Grant unprivileged gamer user access to PulseAudio socket and runtime directory
-chmod 777 "$XDG_RUNTIME_DIR" 2>/dev/null || true
-chmod -R 777 "$XDG_RUNTIME_DIR/pulse" 2>/dev/null || true
-
-# Start Openbox window manager in background for window frames, moving & resizing
-openbox &
-
-# Start tint2 taskbar panel in background for window switching
-if which tint2 >/dev/null 2>&1; then
-    tint2 -c /tmp/kaggle-game-dev-bench/tint2rc &
-fi
-
-# Run the controller-friendly launcher UI as the main session process
-exec runuser -u gamer -- env -u DBUS_SESSION_BUS_ADDRESS DISPLAY="$DISPLAY" HOME=/home/gamer PATH="$PATH" \
-    XDG_RUNTIME_DIR="$XDG_RUNTIME_DIR" SDL_AUDIODRIVER=pulse \
-    PULSE_SERVER="$PULSE_SERVER" \
-    SELKIES_JS_SOCKET_PATH="$SELKIES_JS_SOCKET_PATH" \
-    LD_PRELOAD="$LD_PRELOAD" SDL_JOYSTICK_DISABLE_UDEV=1 \
-    SDL_JOYSTICK_DEVICE="$SDL_JOYSTICK_DEVICE" \
-    dbus-run-session -- /usr/bin/env python3 /tmp/kaggle-game-dev-bench/dev_launcher.py
-''' + "'''" + r''')
+wrapper.write_text(''' + repr(start_desktop_code) + r''', encoding='utf-8')
 wrapper.chmod(0o755)
 
 # Stop any previous session

@@ -1,9 +1,10 @@
-"""Apply reversible Heroic settings for this container, disarm DXVK, and sync Legendary auth."""
+"""Apply Heroic settings according to the live, measured graphics backend."""
 import json
 import os
 from pathlib import Path
 import shutil
 from datetime import datetime, timezone
+from gpu_runtime import diagnose
 
 HOME = Path(os.environ.get('KAGGLE_GAMER_HOME', '/home/gamer'))
 CONFIG = HOME / '.config/heroic'
@@ -11,6 +12,9 @@ GAME_CONFIG = CONFIG / 'GamesConfig'
 RUNNERS = CONFIG / 'tools/wine'
 BACKUPS = HOME / 'logs/heroic-config-backups'
 BACKUPS.mkdir(parents=True, exist_ok=True)
+GPU_FACTS = diagnose()
+GPU_DXVK = (GPU_FACTS['vulkan_window'] and GPU_FACTS['nvidia_32bit_gl']
+            and GPU_FACTS['vulkan_32bit_loader'] and GPU_FACTS['dxvk_files'])
 
 # Select best available Wine runner (Prefer Wine-GE over system wine)
 runner = {'bin': '/usr/bin/wine', 'wineserver': '/usr/bin/wineserver',
@@ -89,9 +93,10 @@ def repair(path, global_config=False):
         return 'unexpected settings shape'
 
     for settings in settings_objects:
-        for key in ('autoInstallDxvk', 'autoInstallVkd3d', 'autoInstallDxvkNvapi',
+        for key in ('autoInstallVkd3d', 'autoInstallDxvkNvapi',
                     'enableEsync', 'enableFsync'):
             settings[key] = False
+        settings['autoInstallDxvk'] = bool(GPU_DXVK)
         settings['disableUMU'] = True
 
         # Assign Wine runner
@@ -108,16 +113,19 @@ def repair(path, global_config=False):
         found_override = False
         for opt in env_opts:
             if isinstance(opt, dict) and opt.get('key') == 'WINEDLLOVERRIDES':
-                opt['value'] = 'd3d11,dxgi,d3d9,d3d10core=b'
+                opt['value'] = ('d3d11,dxgi,d3d9,d3d10core=n,b' if GPU_DXVK
+                                else 'd3d11,dxgi,d3d9,d3d10core=b')
                 found_override = True
                 break
         if not found_override:
-            env_opts.append({'key': 'WINEDLLOVERRIDES', 'value': 'd3d11,dxgi,d3d9,d3d10core=b'})
+            env_opts.append({'key': 'WINEDLLOVERRIDES', 'value':
+                             'd3d11,dxgi,d3d9,d3d10core=n,b' if GPU_DXVK
+                             else 'd3d11,dxgi,d3d9,d3d10core=b'})
         settings['enviromentOptions'] = env_opts
 
         # Clean prefix DXVK overrides if prefix exists
         pfx = settings.get('winePrefix')
-        if pfx and os.path.isdir(pfx):
+        if pfx and os.path.isdir(pfx) and not GPU_DXVK:
             clean_prefix_dxvk(Path(pfx))
 
     new_text = json.dumps(data, indent=2) + '\n'

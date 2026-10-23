@@ -66,19 +66,8 @@ while true; do
                 if [ -z "$WINE_BIN" ]; then
                     echo "Error: No Wine runner found on system!"
                 else
-                    echo "Launching $appname via WineD3D using runner: $WINE_BIN"
-                    export WINEDLLOVERRIDES="d3d11,dxgi,d3d9,d3d10core=b;mscoree,mshtml=d"
+                    echo "Checking GPU 3D renderer before launching $appname using runner: $WINE_BIN"
                     export WINEPREFIX="/home/gamer/.wine"
-                    export LD_LIBRARY_PATH="/usr/lib/i386-linux-gnu:/usr/lib/x86_64-linux-gnu:$LD_LIBRARY_PATH"
-                    export LIBGL_DRIVERS_PATH="/usr/lib/i386-linux-gnu/dri:/usr/lib/x86_64-linux-gnu/dri"
-                    export LIBGL_ALWAYS_SOFTWARE=1
-                    export MESA_LOADER_DRIVER_OVERRIDE=llvmpipe
-                    export LP_NUM_THREADS=4
-                    export GALLIUM_DRIVER=llvmpipe
-                    export WINE_D3D_CONFIG="csmt=3;max_sm_vs=5;max_sm_ps=5"
-                    export MESA_GL_VERSION_OVERRIDE="4.5"
-                    export __GL_SYNC_TO_VBLANK=0
-                    export vblank_mode=0
                     
                     # Auto-heal prefix if kernel32.dll is missing
                     if [ ! -f "$WINEPREFIX/drive_c/windows/system32/kernel32.dll" ]; then
@@ -89,7 +78,7 @@ while true; do
                         fi
                     fi
                     
-                    legendary launch "$appname" --wine "$WINE_BIN" 2>&1 | tee -a /home/gamer/logs/legendary-game.log
+                    python3 /tmp/kaggle-game-dev-bench/gpu_runtime.py launch "$appname" "$WINE_BIN" 2>&1 | tee -a /home/gamer/logs/legendary-game.log
                     echo "Legendary exit status: ${PIPESTATUS[0]}" | tee -a /home/gamer/logs/legendary-game.log
                 fi
             fi

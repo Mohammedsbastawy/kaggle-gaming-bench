@@ -1,0 +1,170 @@
+"""Choose a measured graphics path for Legendary/Wine games.
+
+NVENC and nvidia-smi are deliberately not treated as proof of 3D rendering.
+Run ``python3 gpu_runtime.py diagnose`` inside the live desktop session.
+"""
+import json
+import os
+from pathlib import Path
+import re
+import shutil
+import subprocess
+import sys
+
+
+def run(command, env=None, timeout=12):
+    try:
+        result = subprocess.run(command, env=env, text=True, errors="replace",
+                                stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                                timeout=timeout, check=False)
+        return result.returncode, result.stdout
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        return 1, str(exc)
+
+
+def clean_env():
+    env = os.environ.copy()
+    for key in ("LIBGL_ALWAYS_SOFTWARE", "GALLIUM_DRIVER", "MESA_LOADER_DRIVER_OVERRIDE",
+                "MESA_GL_VERSION_OVERRIDE", "LIBGL_DRIVERS_PATH",
+                "__GLX_VENDOR_LIBRARY_NAME"):
+        env.pop(key, None)
+    # The Selkies input interposer must not affect graphics probes.
+    env.pop("LD_PRELOAD", None)
+    return env
+
+
+def nvidia_renderer(output):
+    match = re.search(r"OpenGL renderer string:\s*(.+)", output, re.I)
+    return bool(match and "NVIDIA" in match.group(1).upper())
+
+
+def has_32bit_library(name):
+    rc, out = run(["ldconfig", "-p"], timeout=4)
+    return rc == 0 and any(f"{name} (libc6)" in line
+                           for line in out.splitlines())
+
+
+def dxvk_available():
+    root = Path("/opt/gamelab-dxvk/dxvk-2.6.2")
+    return all((root / arch / (name + ".dll")).is_file()
+               for arch in ("x32", "x64")
+               for name in ("d3d9", "d3d10core", "d3d11", "dxgi"))
+
+
+def install_dxvk(prefix):
+    """Install both bitnesses without following Wine DLL symlinks."""
+    root = Path("/opt/gamelab-dxvk/dxvk-2.6.2")
+    for arch, subdir in (("x64", "system32"), ("x32", "syswow64")):
+        destination = Path(prefix) / "drive_c/windows" / subdir
+        if not destination.is_dir():
+            raise RuntimeError(f"Wine prefix is incomplete: {destination}")
+        for name in ("d3d9", "d3d10core", "d3d11", "dxgi"):
+            target = destination / (name + ".dll")
+            backup = destination / (name + ".dll.gamelab-original")
+            temporary = destination / (name + ".dll.gamelab-new")
+            shutil.copyfile(root / arch / target.name, temporary)
+            if (target.exists() or target.is_symlink()) and not backup.exists():
+                os.replace(target, backup)
+            os.replace(temporary, target)
+
+
+def diagnose():
+    env = clean_env()
+    facts = {
+        "display": env.get("DISPLAY", ""),
+        "nvidia_control": Path("/dev/nvidiactl").exists(),
+        "nvidia_gpu": Path("/dev/nvidia0").exists(),
+        "nvidia_modeset": Path("/dev/nvidia-modeset").exists(),
+        "nvidia_icd": any(Path(p).exists() for p in (
+            "/etc/vulkan/icd.d/nvidia_icd.json",
+            "/usr/share/vulkan/icd.d/nvidia_icd.json")),
+        "direct_gl": False, "virtualgl": False, "virtualgl_display": "",
+        "vulkan_device": False,
+        "vulkan_window": False,
+        "nvidia_32bit_gl": has_32bit_library("libGLX_nvidia.so.0"),
+        "vulkan_32bit_loader": has_32bit_library("libvulkan.so.1"),
+        "dxvk_files": dxvk_available(),
+    }
+    if shutil.which("glxinfo") and env.get("DISPLAY"):
+        rc, out = run(["glxinfo", "-B"], env)
+        facts["direct_gl"] = rc == 0 and nvidia_renderer(out)
+        facts["gl_renderer"] = next((line.strip() for line in out.splitlines()
+                                     if "OpenGL renderer string:" in line), out[-240:])
+        vgl = shutil.which("vglrun") or "/opt/VirtualGL/bin/vglrun"
+        if Path(vgl).is_file() and facts["nvidia_control"] and facts["nvidia_gpu"]:
+            candidates = ["egl0"]
+            if Path("/tmp/kaggle-game-dev-bench/gpu-xorg-ready").exists():
+                candidates.append(":1")
+            for target in candidates:
+                rc, out = run([vgl, "-d", target, "glxinfo", "-B"], env)
+                if rc == 0 and nvidia_renderer(out):
+                    facts["virtualgl"] = True
+                    facts["virtualgl_display"] = target
+                    facts["vgl_renderer"] = next((line.strip() for line in out.splitlines()
+                                                   if "OpenGL renderer string:" in line), out[-240:])
+                    break
+    if facts["nvidia_control"] and facts["nvidia_gpu"] and shutil.which("vulkaninfo"):
+        rc, out = run(["vulkaninfo", "--summary"], env)
+        facts["vulkan_device"] = rc == 0 and bool(re.search(
+            r"deviceName\s*=.*(?:NVIDIA|Tesla T4)", out, re.I))
+        facts["vulkan_summary"] = out[-500:]
+    if facts["vulkan_device"] and env.get("DISPLAY"):
+        rc, out = run([sys.executable, "-m", "selkies.gpu_probe", "--vulkan-window"], env)
+        facts["vulkan_window"] = rc == 0 and out.strip() == "true"
+    return facts
+
+
+def launch(app, wine):
+    facts = diagnose()
+    env = clean_env()
+    env["WINEPREFIX"] = os.environ.get("WINEPREFIX", "/home/gamer/.wine")
+    env["WINEDLLOVERRIDES"] = "d3d11,dxgi,d3d9,d3d10core=b;mscoree,mshtml=d"
+    env["SDL_AUDIODRIVER"] = "pulse"
+    env["HOME"] = os.environ.get("KAGGLE_GAMER_HOME", "/home/gamer")
+    env["__GL_SYNC_TO_VBLANK"] = "0"
+    # Preserve the controller interposer for the game, not for probes.
+    if os.environ.get("LD_PRELOAD"):
+        env["LD_PRELOAD"] = os.environ["LD_PRELOAD"]
+    command = ["legendary", "launch", app, "--wine", wine]
+    if (facts["vulkan_window"] and facts["nvidia_32bit_gl"]
+            and facts["vulkan_32bit_loader"] and facts["dxvk_files"]):
+        try:
+            install_dxvk(env["WINEPREFIX"])
+        except (OSError, RuntimeError) as exc:
+            print(f"DXVK setup failed: {exc}", file=sys.stderr)
+            return 78
+        env["WINEDLLOVERRIDES"] = "d3d11,dxgi,d3d9,d3d10core=n,b;mscoree,mshtml=d"
+        env["DXVK_HUD"] = "devinfo,fps"
+        backend = "NVIDIA Vulkan through DXVK"
+        if facts["virtualgl"]:
+            vgl = shutil.which("vglrun") or "/opt/VirtualGL/bin/vglrun"
+            command = [vgl, "-d", facts["virtualgl_display"], *command]
+    elif facts["direct_gl"] and facts["nvidia_32bit_gl"]:
+        backend = "NVIDIA OpenGL"
+    elif facts["virtualgl"] and facts["nvidia_32bit_gl"]:
+        backend = "NVIDIA OpenGL through VirtualGL"
+        vgl = shutil.which("vglrun") or "/opt/VirtualGL/bin/vglrun"
+        command = [vgl, "-d", facts["virtualgl_display"], *command]
+    elif os.environ.get("GAMELAB_ALLOW_SOFTWARE") == "1":
+        backend = "Mesa software (explicit opt-in)"
+        env["WINEDLLOVERRIDES"] = "d3d11,dxgi,d3d9,d3d10core=b;mscoree,mshtml=d"
+        env["LIBGL_ALWAYS_SOFTWARE"] = "1"
+        env["GALLIUM_DRIVER"] = "llvmpipe"
+    else:
+        print("No verified NVIDIA 3D renderer with 32-bit and 64-bit support is available. "
+              "Game launch stopped to avoid llvmpipe CPU saturation. "
+              "Run 'python3 gpu_runtime.py diagnose' for details. "
+              "Set GAMELAB_ALLOW_SOFTWARE=1 only to opt into CPU rendering.", file=sys.stderr)
+        return 78
+    print(f"Rendering backend: {backend}", flush=True)
+    return subprocess.call(command, env=env)
+
+
+if __name__ == "__main__":
+    if len(sys.argv) == 2 and sys.argv[1] == "diagnose":
+        print(json.dumps(diagnose(), indent=2))
+    elif len(sys.argv) == 4 and sys.argv[1] == "launch":
+        sys.exit(launch(sys.argv[2], sys.argv[3]))
+    else:
+        print("Usage: gpu_runtime.py diagnose | launch APP WINE_BIN", file=sys.stderr)
+        sys.exit(2)

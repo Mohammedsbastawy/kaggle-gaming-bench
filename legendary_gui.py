@@ -174,7 +174,7 @@ class LegendaryApp(tk.Tk):
                              activebackground="#2a364d", cursor="hand2", command=self.sync_and_refresh)
         btn_sync.pack(side="left", padx=5)
 
-        btn_fix = tk.Button(toolbar, text=" 🛠️ Disarm DXVK & Fix Prefixes ", bg=self.c_card, fg=self.c_fg,
+        btn_fix = tk.Button(toolbar, text=" 🛠️ Check GPU & Fix Prefixes ", bg=self.c_card, fg=self.c_fg,
                             font=("DejaVu Sans", 10), relief="flat", padx=12, pady=6,
                             activebackground="#2a364d", cursor="hand2", command=self.run_sanitizer)
         btn_fix.pack(side="left", padx=5)
@@ -275,7 +275,7 @@ class LegendaryApp(tk.Tk):
         bar = tk.Frame(self, bg=self.c_panel, height=32)
         bar.pack(fill="x", side="bottom", padx=12, pady=(0, 8))
 
-        lbl_tip = tk.Label(bar, text="💡 Tip: Double-click any installed game to launch immediately with WineD3D software rendering.",
+        lbl_tip = tk.Label(bar, text="💡 Game launches require a verified NVIDIA 3D renderer. Run gpu_runtime.py diagnose for details.",
                            bg=self.c_panel, fg=self.c_muted, font=("DejaVu Sans", 9))
         lbl_tip.pack(side="left", padx=12, pady=6)
 
@@ -374,7 +374,7 @@ class LegendaryApp(tk.Tk):
 
     def run_sanitizer(self):
         self.notebook.select(self.tab_console)
-        self.log("▶ Disarming DXVK DLLs and enforcing WineD3D software rendering...")
+        self.log("▶ Checking live GPU renderer and updating Wine settings...")
         threading.Thread(target=self._run_sanitizer_worker, daemon=True).start()
 
     def _run_sanitizer_worker(self):
@@ -385,7 +385,7 @@ class LegendaryApp(tk.Tk):
                 self.log(res.stdout)
             subprocess.run(["chown", "-R", "gamer:gamer", "/home/gamer"], check=False)
             subprocess.run(["chmod", "-R", "u+rwX", "/home/gamer"], check=False)
-            self.log("✓ Settings sanitized! DXVK disabled, Wine-GE assigned, and gamer permissions fixed.")
+            self.log("✓ Wine settings updated for the detected graphics backend.")
             self.after(0, self.refresh_all)
         except Exception as e:
             self.log(f"Error during sanitization: {e}")
@@ -407,31 +407,15 @@ class LegendaryApp(tk.Tk):
 
         runner = find_best_runner()
         self.log(f"Runner: {runner}")
-        self.log(f"WineD3D: Overriding d3d11, dxgi, d3d9, d3d10core = builtin")
+        self.log("Checking for NVIDIA OpenGL before launch...")
 
         threading.Thread(target=self._launch_worker, args=(app_name, title, runner), daemon=True).start()
 
     def _launch_worker(self, app_name, title, runner):
         env = dict(os.environ)
-        env["WINEDLLOVERRIDES"] = "d3d11,dxgi,d3d9,d3d10core=b;mscoree,mshtml=d"
         env["DISPLAY"] = os.environ.get("DISPLAY", ":0")
-        env["SDL_AUDIODRIVER"] = "pulse"
-        env["HOME"] = "/home/gamer"
+        env["HOME"] = str(HOME)
         env["WINEPREFIX"] = str(HOME / ".wine")
-
-        # Complete 32-bit and 64-bit OpenGL & Mesa fallback
-        env["LD_LIBRARY_PATH"] = f"/usr/lib/i386-linux-gnu:/usr/lib/x86_64-linux-gnu:{env.get('LD_LIBRARY_PATH', '')}"
-        env["LIBGL_DRIVERS_PATH"] = "/usr/lib/i386-linux-gnu/dri:/usr/lib/x86_64-linux-gnu/dri"
-        env["LIBGL_ALWAYS_SOFTWARE"] = "1"
-        env["MESA_LOADER_DRIVER_OVERRIDE"] = "llvmpipe"
-
-        # Max Multi-threading & GPU/CPU performance boost
-        env["LP_NUM_THREADS"] = "4"
-        env["GALLIUM_DRIVER"] = "llvmpipe"
-        env["WINE_D3D_CONFIG"] = "csmt=3;max_sm_vs=5;max_sm_ps=5"
-        env["MESA_GL_VERSION_OVERRIDE"] = "4.5"
-        env["__GL_SYNC_TO_VBLANK"] = "0"
-        env["vblank_mode"] = "0"
 
         # Automatically verify and heal Wine prefix before launch if kernel32.dll is missing
         kernel32 = HOME / ".wine/drive_c/windows/system32/kernel32.dll"
@@ -447,17 +431,8 @@ class LegendaryApp(tk.Tk):
                 except Exception as wb_err:
                     self.log(f"Notice auto-initializing prefix: {wb_err}")
 
-        # Source auto-optimizer Wine settings if available
-        wine_env = HOME / '.config/gamelab_wine_env.sh'
-        if wine_env.is_file():
-            for line in wine_env.read_text(encoding='utf-8').splitlines():
-                line = line.strip()
-                if line.startswith('export ') and '=' in line:
-                    kv = line[7:]  # strip 'export '
-                    k, _, v = kv.partition('=')
-                    env[k] = v.strip('"').strip("'")
-
-        cmd = ["legendary", "launch", app_name, "--wine", runner]
+        cmd = ["python3", "/tmp/kaggle-game-dev-bench/gpu_runtime.py",
+               "launch", app_name, runner]
         self.lbl_status.config(text=f"▶ Running: {title}", fg=self.c_green)
 
         try:

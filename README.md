@@ -68,5 +68,30 @@ Then start the Selkies session using the provided starter.
 ## Hardware Reality & Constraints
 
 * **NVENC 60 FPS Streaming**: Tesla T4 hardware encoder captures Xvfb at 1280×720 @ 60 FPS over WebSockets.
-* **Desktop 3D Graphics**: Datacenter Tesla T4 containers lack physical display scanout hardware (`/dev/nvidia-modeset`) and Vulkan ICD. All 3D rendering uses **Mesa llvmpipe software rasterization via WineD3D**. Native DXVK and hardware Vulkan are unavailable.
+* **Desktop 3D Graphics**: The observed Kaggle container exposes NVENC but does not expose the NVIDIA display driver and Vulkan ICD needed for game rendering. The launcher now checks the live NVIDIA renderer and refuses an unaccelerated game launch by default, avoiding the previous 100% CPU stall. `GAMELAB_ALLOW_SOFTWARE=1` explicitly opts into llvmpipe for light games.
+
+## NVIDIA 3D deployment and verification
+
+The container host must provide graphics driver components **when it creates the container**. Setting `NVIDIA_DRIVER_CAPABILITIES` later in a Kaggle notebook cannot add missing device mounts or libraries. On a host you control, create the container with the NVIDIA Container Toolkit and capabilities `compute,utility,video,graphics,display,compat32` and expose the NVIDIA device nodes. The exact Docker example is:
+
+```bash
+docker run --gpus all \
+  -e NVIDIA_DRIVER_CAPABILITIES=compute,utility,video,graphics,display,compat32 \
+  -it your-image bash
+```
+
+The host must have matching NVIDIA 64-bit and 32-bit graphics libraries. Keep its NVIDIA kernel driver and container libraries on the **same driver version**. The repository's `setup.sh` installs Xorg, VirtualGL 3.1.5 (both bitnesses), and DXVK 2.6.2 only when the relevant NVIDIA devices or ICD are present. The downloaded packages are SHA-256 checked. It does **not** install a second NVIDIA kernel driver or create a fake Vulkan ICD.
+
+`start_desktop.sh` keeps Selkies on Xvfb and starts an optional NVIDIA Xorg on `:1` when display devices are mounted. VirtualGL first tests its headless EGL device path (`egl0`), then the Xorg path, accepting either only when `glxinfo` reports an NVIDIA renderer. The headless Xorg config uses `AllowEmptyInitialConfiguration` and `UseDisplayDevice none`; `gpu_xorg.sh` logs failures in `/tmp/kaggle-game-dev-bench/logs/gpu-xorg.log`. VirtualGL transfers OpenGL frames from the GPU X server into the Xvfb desktop that Selkies captures. `gpu_runtime.py` checks the live OpenGL renderer and NVIDIA Vulkan device plus an actual X11 Vulkan swapchain. It installs both DXVK DLL bitnesses into the Wine prefix with backups only when the Vulkan check passes; otherwise it uses GPU WineD3D if available. The Legendary GUI and terminal menu call this wrapper automatically. Heroic enables its DXVK setting only when the same Vulkan check passes.
+
+From a running desktop terminal, check the result as user `gamer`:
+
+```bash
+python3 /tmp/kaggle-game-dev-bench/gpu_runtime.py diagnose
+DISPLAY=:1 glxinfo -B                    # only when gpu-xorg-ready exists
+vulkaninfo --summary                     # deviceName must be NVIDIA Tesla T4
+nvidia-smi dmon -s u                     # inspect 3D/graphics utilization during a game
+```
+
+`direct_gl` or `virtualgl` must be true for GPU WineD3D. `vulkan_window`, `vulkan_32bit_loader`, and `dxvk_files` must all be true for DXVK. `nvidia_32bit_gl` must be true for 32-bit games. NVENC activity and a 60 FPS stream alone do not establish game frame rate or GPU rasterization. If Kaggle still omits `/dev/nvidia-modeset`, the NVIDIA Xorg/VirtualGL route cannot start there; if it omits the graphics ICD or Vulkan window support, DXVK cannot run there. `__NV_PRIME_RENDER_OFFLOAD`, `__GLX_VENDOR_LIBRARY_NAME`, `LD_PRELOAD`, and a hand-written `nvidia_icd.json` cannot supply driver libraries or device access that the host withheld.
 * **Controller Support**: 4 virtual Xbox 360 controllers enumerated via Selkies input interposer without `/dev/uinput`.
