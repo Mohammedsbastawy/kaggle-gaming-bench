@@ -31,8 +31,11 @@ if [ "$(id -u)" -eq 0 ]; then
     /bin/bash /tmp/kaggle-game-dev-bench/gpu_xorg.sh || true
 fi
 
-# Grant unprivileged gamer user access to X11 display
-xhost +si:localuser:gamer 2>/dev/null || true
+# Grant unprivileged gamer user access to X11 display and root packages
+xhost + 2>/dev/null || true
+chmod 755 /root 2>/dev/null || true
+chmod -R 755 /root/.local 2>/dev/null || true
+chmod -R 777 /home/gamer 2>/dev/null || true
 xset m 0 0 2>/dev/null || true
 
 # Grant unprivileged gamer user access to PulseAudio socket and runtime directory
@@ -94,8 +97,9 @@ if [ "$(id -u)" -eq 0 ]; then
         __EGL_VENDOR_LIBRARY_FILENAMES="${__EGL_VENDOR_LIBRARY_FILENAMES:-}" \
         VK_DRIVER_FILES="${VK_DRIVER_FILES:-}" VK_ICD_FILENAMES="${VK_ICD_FILENAMES:-}" \
         GAMELAB_NVIDIA_LIB32="${GAMELAB_NVIDIA_LIB32:-}" \
+        PYTHONPATH="/root/.local/lib/python3.13/site-packages:/usr/local/lib/python3.13/dist-packages:${PYTHONPATH:-}" \
         LD_PRELOAD="$LD_PRELOAD" SDL_JOYSTICK_DISABLE_UDEV=1 \
         SDL_JOYSTICK_DEVICE="$SDL_JOYSTICK_DEVICE" \
-        dbus-run-session -- /usr/bin/env python3 /tmp/kaggle-game-dev-bench/dev_launcher.py
+        bash -c "while true; do python3 /tmp/kaggle-game-dev-bench/dev_launcher.py >> /home/gamer/logs/launcher.log 2>&1 || python3 /tmp/kaggle-game-dev-bench/legendary_gui.py >> /home/gamer/logs/gui.log 2>&1 || sleep 2; done"
 fi
-exec /usr/bin/env python3 /tmp/kaggle-game-dev-bench/dev_launcher.py
+exec bash -c "while true; do python3 /tmp/kaggle-game-dev-bench/dev_launcher.py >> /home/gamer/logs/launcher.log 2>&1 || python3 /tmp/kaggle-game-dev-bench/legendary_gui.py >> /home/gamer/logs/gui.log 2>&1 || sleep 2; done"
