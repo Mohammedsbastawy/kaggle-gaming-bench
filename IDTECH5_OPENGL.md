@@ -100,6 +100,70 @@ Zink is a separate Mesa-on-Vulkan experiment and still needs an appropriate
 X11 presentation path. Current VirtualGL enables its dlopen interposer by
 default: use `vglrun -d egl0 wine ...`, without `-dl`.
 
+## Black screen with game audio
+
+Audio and a live Wine process show that startup progressed; they do not show
+whether a non-black frame reached the Xvfb window. Use one diagnostic launch
+that skips the game's intro video, requests a 1280x720 window, and makes
+VirtualGL synchronously deliver each frame. Replace the executable path:
+
+```bash
+export DISPLAY=:0
+export VGL_COMPRESS=proxy
+export VGL_SYNC=1
+export VGL_READBACK=sync
+export VGL_LOGO=1
+export VGL_PROFILE=1
+export VGL_VERBOSE=1
+
+python3 /tmp/kaggle-game-dev-bench/launch_idtech5.py \
+  --wine /home/gamer/.config/heroic/tools/wine/Wine-GE-Proton8-26/bin/wine \
+  --egl-device egl0 \
+  '/path/to/WolfNewOrder_x64.exe' \
+  +com_skipIntroVideo 1 \
+  +r_fullscreen 0 +r_mode -1 +r_customWidth 1280 +r_customHeight 720 \
+  2>&1 | tee /tmp/wolf-vgl.log
+```
+
+`+com_skipIntroVideo 1` is used by the published Lutris installer for this
+title. The window and resolution cvars are a diagnostic request, not a
+verified fix for this Kaggle instance. Wine's virtual desktop can be tested
+separately if the game still creates an off-screen or incorrectly sized window.
+
+Inspect the resulting window and the frame path while the game is active:
+
+```bash
+xwininfo -root -tree | grep -Ei 'Wolf|Wine|desktop'
+grep -Ei 'VGL|frame|readback|error' /tmp/wolf-vgl.log | tail -80
+nvidia-smi dmon -s u -c 10
+
+# If ffmpeg is available, compare this direct Xvfb capture with Selkies.
+ffmpeg -loglevel error -f x11grab -video_size 1280x720 -i :0 \
+  -frames:v 1 -y /tmp/wolf-xvfb.png
+```
+
+Interpret the evidence before changing more settings:
+
+| Observation | Next action |
+| --- | --- |
+| Xvfb PNG has the game, browser is black | Investigate Selkies capture/encode, not Wine or VirtualGL. |
+| Game window is absent or outside 1280x720 | Check its X11 geometry and try Wine's virtual desktop at 1280x720. |
+| VirtualGL reports frame transfers or shows its logo over a black game image | The transport works; focus on the game's movie/rendering path and game log. |
+| No frame transfers or logo, while the game window exists | Check that `libvglfaker.so` is loaded into the actual Wine game process; then try the `:1` NVIDIA GLX backend. |
+| EGL backend fails but `:1` NVIDIA GLX succeeds | Use `vglrun -d :1` with the same captured `DISPLAY=:0`. |
+
+After diagnosis, unset the temporary synchronous settings before normal
+streaming: `unset VGL_SYNC VGL_READBACK VGL_LOGO VGL_PROFILE VGL_VERBOSE`.
+`VGL_FORCEALPHADEPTH` is not a documented VirtualGL setting;
+`VGL_FORCEALPHA=1` can help a specific PBO pixel-format mismatch, but is not
+a general black-screen remedy. `VGL_SYNC=1` forces readback and display at
+each frame trigger and can lower frame rate, so use it to locate the failure
+before tuning for 60 FPS.
+
+The intro flag is documented in the [Lutris installer](https://lutris.net/games/install/18692/view).
+VirtualGL documents [frame profiling, diagnostic logo, synchronous transport,
+and readback modes](https://github.com/VirtualGL/virtualgl/blob/main/doc/advancedconfig.txt).
+
 Sources: [Wine X11 OpenGL initialization](https://github.com/wine-mirror/wine/blob/master/dlls/winex11.drv/opengl.c),
 [VirtualGL changelog](https://github.com/VirtualGL/virtualgl/blob/main/ChangeLog.md),
 [VirtualGL vglrun](https://github.com/VirtualGL/virtualgl/blob/main/server/vglrun.in),

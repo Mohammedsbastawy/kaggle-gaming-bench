@@ -75,8 +75,13 @@ def main():
         return 78
 
     # vglrun already preloads libdlfaker and libvglfaker by default.
-    command = [str(VGL), "-d", args.egl_device, str(wine), str(game)]
-    command.extend(args.game_args)
+    wine_bin = wine.with_name("wine64") if wine.with_name("wine64").is_file() else wine
+    command = [str(VGL), "-d", args.egl_device, str(wine_bin), str(game)]
+    if not args.game_args:
+        command.extend(["+com_skipIntroVideo", "1", "+r_fullscreen", "0",
+                        "+r_mode", "-1", "+r_customWidth", "1280", "+r_customHeight", "720"])
+    else:
+        command.extend(args.game_args)
     print("OpenGL target:", args.egl_device, flush=True)
     print("Wine window:", env["DISPLAY"], flush=True)
     return subprocess.call(command, cwd=game.parent, env=env)

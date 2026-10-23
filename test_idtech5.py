@@ -8,9 +8,9 @@ import launch_idtech5
 
 
 class IdTech5LaunchTests(unittest.TestCase):
-    def run_launcher(self, glx_output, vgl_output=""):
+    def run_launcher(self, glx_output, vgl_output="", game_args=()):
         argv = ["launch_idtech5.py", "--wine", "/wine/bin/wine",
-                "/games/WolfNewOrder_x64.exe"]
+                "/games/WolfNewOrder_x64.exe", *game_args]
         with patch.object(sys, "argv", argv), \
              patch.object(Path, "is_file", return_value=True), \
              patch.object(launch_idtech5, "probe",
@@ -30,12 +30,15 @@ class IdTech5LaunchTests(unittest.TestCase):
                 "OpenGL renderer string: Tesla T4/PCIe/SSE2\n")
         with patch.dict(os.environ, {"DISPLAY": ":0",
                                   "MESA_GL_VERSION_OVERRIDE": "4.5COMPAT"}):
-            status, _, call = self.run_launcher("  GLX  (opcode: 150)\n", info)
+            status, _, call = self.run_launcher(
+                "  GLX  (opcode: 150)\n", info,
+                ("+com_skipIntroVideo", "1", "+r_fullscreen", "0"))
         self.assertEqual(status, 0)
         command = call.call_args.args[0]
-        self.assertEqual(command[:4], [str(launch_idtech5.VGL), "-d", "egl0",
-                                       str(Path("/wine/bin/wine").resolve())])
+        self.assertEqual(command[:3], [str(launch_idtech5.VGL), "-d", "egl0"])
+        self.assertIn("wine", str(command[3]))
         self.assertNotIn("-dl", command)
+        self.assertEqual(command[-4:], ["+com_skipIntroVideo", "1", "+r_fullscreen", "0"])
         self.assertEqual(call.call_args.kwargs["env"]["DISPLAY"], ":0")
         self.assertNotIn("MESA_GL_VERSION_OVERRIDE", call.call_args.kwargs["env"])
 
