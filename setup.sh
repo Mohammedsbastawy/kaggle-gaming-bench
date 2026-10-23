@@ -256,6 +256,10 @@ if [ ! -f "$BENCH/lib/x86_64-linux-gnu/selkies_input_interposer.so" ]; then
         cp -f "$SOURCE/addons/fake-udev/libudev.so.1" "$BENCH/lib/x86_64-linux-gnu/selkies_fake_udev.so" 2>/dev/null || true
         cp -f "$SOURCE/addons/fake-udev/libudev_x86.so.1" "$BENCH/lib/i386-linux-gnu/selkies_fake_udev.so" 2>/dev/null || true
     fi
+    ln -sf "$BENCH/lib/x86_64-linux-gnu" "$BENCH/lib64" 2>/dev/null || true
+    ln -sf "$BENCH/lib/i386-linux-gnu" "$BENCH/lib32" 2>/dev/null || true
+    cp -f "$BENCH/lib/x86_64-linux-gnu/"*.so /usr/lib/x86_64-linux-gnu/ 2>/dev/null || true
+    cp -f "$BENCH/lib/i386-linux-gnu/"*.so /usr/lib/i386-linux-gnu/ 2>/dev/null || true
 fi
 
 # 15. Automatic NVIDIA Tesla T4 userspace driver extraction and registration

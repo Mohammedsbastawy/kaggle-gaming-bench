@@ -13,9 +13,12 @@ for i in 0 1 2 3; do touch /dev/input/js$i 2>/dev/null || true; done
 for i in 1000 1001 1002 1003; do touch /dev/input/event$i 2>/dev/null || true; done
 chmod -R 666 /dev/input 2>/dev/null || true
 
-# Continuous socket permission monitor so unprivileged gamer user can connect to gamepad sockets
+# Continuous socket permission and mirroring monitor so gamer user can connect to gamepad sockets
 (while true; do
-    chmod 666 /tmp/selkies_*.sock 2>/dev/null || true
+    chmod 755 /run/user /run/user/0 2>/dev/null || true
+    chmod 666 /tmp/selkies_*.sock /run/user/*/selkies_*.sock 2>/dev/null || true
+    ln -sf /run/user/0/selkies_*.sock /tmp/ 2>/dev/null || true
+    ln -sf /tmp/selkies_*.sock /run/user/1000/ 2>/dev/null || true
     sleep 2
 done) &
 
