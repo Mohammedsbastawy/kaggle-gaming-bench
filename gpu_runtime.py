@@ -424,7 +424,16 @@ def launch(app, wine):
     vgl_ready = Path(vgl).is_file() and (facts.get("virtualgl") or facts.get("egl_device"))
     vgl_display = facts.get("virtualgl_display") or facts.get("egl_device_display") or "egl0"
 
+    # Create single-binary wrapper script without spaces for any launcher
+    wrap_script = Path("/tmp/kaggle-game-dev-bench/vgl-wrap.sh")
+    try:
+        wrap_script.write_text(f"#!/bin/bash\nexec {vgl} -d {vgl_display} \"$@\"\n", encoding="utf-8")
+        wrap_script.chmod(0o755)
+    except Exception:
+        pass
+
     if vgl_ready:
+        env["VGL_DISPLAY"] = vgl_display
         env.update(VGL_READBACK="pbo", VGL_SPOIL="1", VGL_SYNC="0", VGL_COMPRESS="proxy")
         vgl_fps = os.environ.get("GAMELAB_VGL_FPS", "60")
         try:
@@ -435,15 +444,13 @@ def launch(app, wine):
 
     if target_bin and wine_bin:
         print(f"Target game binary detected: {target_bin}", flush=True)
-        if vgl_ready:
-            command = [vgl, "-d", vgl_display, wine_bin, str(target_bin)]
-        else:
-            command = [wine_bin, str(target_bin)]
+        command = [wine_bin, str(target_bin)]
     else:
-        if vgl_ready:
-            command = ["legendary", "launch", app, "--wine", wine, "--wrapper", f"{vgl} -d {vgl_display}"]
-        else:
-            command = ["legendary", "launch", app, "--wine", wine]
+        command = ["legendary", "launch", app, "--wine", wine]
+
+    # Prepend vglrun so the entire process tree inherits hardware OpenGL acceleration
+    if vgl_ready:
+        command = [vgl, "-d", vgl_display, *command]
 
     try:
         selected = select_graphics_backend(
