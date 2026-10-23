@@ -4,6 +4,7 @@ NVENC and nvidia-smi are deliberately not treated as proof of 3D rendering.
 Run ``python3 gpu_runtime.py diagnose`` inside the live desktop session.
 """
 import json
+import math
 import os
 from pathlib import Path
 import re
@@ -34,8 +35,11 @@ def clean_env():
 
 
 def nvidia_renderer(output):
-    match = re.search(r"OpenGL renderer string:\s*(.+)", output, re.I)
-    return bool(match and "NVIDIA" in match.group(1).upper())
+    vendor = re.search(r"OpenGL vendor string:\s*(.+)", output, re.I)
+    renderer = re.search(r"OpenGL renderer string:\s*(.+)", output, re.I)
+    # Tesla renderers often say "Tesla T4/PCIe/SSE2", without "NVIDIA".
+    return bool(vendor and "NVIDIA" in vendor.group(1).upper() and renderer
+                and not re.search(r"llvmpipe|softpipe|software", renderer.group(1), re.I))
 
 
 def has_32bit_library(name):
@@ -49,6 +53,86 @@ def dxvk_available():
     return all((root / arch / (name + ".dll")).is_file()
                for arch in ("x32", "x64")
                for name in ("d3d9", "d3d10core", "d3d11", "dxgi"))
+
+
+def egl_device_probe(env):
+    """Test the NVIDIA EGL device directly, independent of Xorg and Xvfb."""
+    eglinfo = Path("/opt/VirtualGL/bin/eglinfo")
+    if not eglinfo.is_file():
+        return False, "VirtualGL eglinfo is not installed", ""
+    rc, listing = run([str(eglinfo), "-e"], env, timeout=8)
+    candidates = list(dict.fromkeys(re.findall(r"\begl\d+\b", listing)))[:8] if rc == 0 else []
+    if not candidates:
+        candidates = ["egl0"]
+    last_result = listing[-240:]
+    for target in candidates:
+        rc, out = run([str(eglinfo), target], env, timeout=12)
+        renderer = next((line.strip() for line in out.splitlines()
+                         if line.strip().startswith("OpenGL renderer string:")), "")
+        vendor = next((line.strip() for line in out.splitlines()
+                       if line.strip().startswith("OpenGL vendor string:")), "")
+        if (rc == 0 and "NVIDIA" in vendor.upper() and renderer
+                and not re.search(r"llvmpipe|softpipe|software", renderer, re.I)):
+            return True, renderer, target
+        last_result = renderer or out[-240:]
+    return False, last_result, ""
+
+
+def cpu_quota_count():
+    """Return the cgroup CPU quota as a whole-core budget, if one exists."""
+    try:
+        quota, period = Path("/sys/fs/cgroup/cpu.max").read_text().split()[:2]
+        if quota != "max":
+            return max(1, math.floor(int(quota) / int(period)))
+    except (OSError, ValueError, ZeroDivisionError):
+        pass
+    try:
+        quota = int(Path("/sys/fs/cgroup/cpu/cpu.cfs_quota_us").read_text())
+        period = int(Path("/sys/fs/cgroup/cpu/cpu.cfs_period_us").read_text())
+        if quota > 0:
+            return max(1, math.floor(quota / period))
+    except (OSError, ValueError, ZeroDivisionError):
+        pass
+    return None
+
+
+def software_threads():
+    override = os.environ.get("LP_NUM_THREADS", "")
+    if override.isdigit() and 1 <= int(override) <= 32:
+        return int(override)
+    try:
+        cores = len(os.sched_getaffinity(0))
+    except AttributeError:
+        cores = os.cpu_count() or 1
+    quota = cpu_quota_count()
+    if quota is not None:
+        cores = min(cores, quota)
+    reserve = 2 if cores >= 4 else 1
+    return max(1, min(8, cores - reserve))
+
+
+def lower_software_resolution(env):
+    """Best-effort temporary Xvfb mode change; game settings may differ."""
+    requested = os.environ.get("GAMELAB_SOFTWARE_RESOLUTION", "854x480")
+    if requested == "off" or not shutil.which("xrandr") or not env.get("DISPLAY"):
+        return None
+    if requested not in ("640x360", "854x480", "1024x576", "1280x720"):
+        print(f"Unsupported GAMELAB_SOFTWARE_RESOLUTION={requested!r}; keeping desktop mode.",
+              file=sys.stderr)
+        return None
+    rc, out = run(["xrandr", "--current"], env, timeout=5)
+    match = re.search(r"\bcurrent (\d+) x (\d+)\b", out)
+    if rc != 0 or not match:
+        return None
+    previous = f"{match.group(1)}x{match.group(2)}"
+    if previous == requested:
+        return None
+    rc, out = run(["xrandr", "-s", requested], env, timeout=5)
+    if rc != 0:
+        print(f"Could not set {requested} desktop mode: {out[-200:]}", file=sys.stderr)
+        return None
+    print(f"Software desktop mode: {requested} (restore {previous} on exit)", flush=True)
+    return previous
 
 
 def install_dxvk(prefix):
@@ -85,6 +169,7 @@ def diagnose():
         "vulkan_32bit_loader": has_32bit_library("libvulkan.so.1"),
         "dxvk_files": dxvk_available(),
     }
+    facts["egl_device"], facts["egl_renderer"], facts["egl_device_display"] = egl_device_probe(env)
     if shutil.which("glxinfo") and env.get("DISPLAY"):
         rc, out = run(["glxinfo", "-B"], env)
         facts["direct_gl"] = rc == 0 and nvidia_renderer(out)
@@ -92,7 +177,7 @@ def diagnose():
                                      if "OpenGL renderer string:" in line), out[-240:])
         vgl = shutil.which("vglrun") or "/opt/VirtualGL/bin/vglrun"
         if Path(vgl).is_file() and facts["nvidia_control"] and facts["nvidia_gpu"]:
-            candidates = ["egl0"]
+            candidates = [facts["egl_device_display"]] if facts["egl_device"] else ["egl0"]
             if Path("/tmp/kaggle-game-dev-bench/gpu-xorg-ready").exists():
                 candidates.append(":1")
             for target in candidates:
@@ -150,6 +235,9 @@ def launch(app, wine):
         env["WINEDLLOVERRIDES"] = "d3d11,dxgi,d3d9,d3d10core=b;mscoree,mshtml=d"
         env["LIBGL_ALWAYS_SOFTWARE"] = "1"
         env["GALLIUM_DRIVER"] = "llvmpipe"
+        env["LP_NUM_THREADS"] = str(software_threads())
+        if shutil.which("nice"):
+            command = ["nice", "-n", "5", *command]
     else:
         print("No verified NVIDIA 3D renderer with 32-bit and 64-bit support is available. "
               "Game launch stopped to avoid llvmpipe CPU saturation. "
@@ -157,6 +245,14 @@ def launch(app, wine):
               "Set GAMELAB_ALLOW_SOFTWARE=1 only to opt into CPU rendering.", file=sys.stderr)
         return 78
     print(f"Rendering backend: {backend}", flush=True)
+    if backend.startswith("Mesa software"):
+        print(f"llvmpipe worker threads: {env['LP_NUM_THREADS']}", flush=True)
+        previous_resolution = lower_software_resolution(env)
+        try:
+            return subprocess.call(command, env=env)
+        finally:
+            if previous_resolution:
+                run(["xrandr", "-s", previous_resolution], env, timeout=5)
     return subprocess.call(command, env=env)
 
 

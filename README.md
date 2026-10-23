@@ -1,6 +1,6 @@
 # Linux Gaming & Game-Development Bench for Kaggle
 
-A ready-to-use, self-contained cloud gaming and game-development visual test bench running on Kaggle with dual NVIDIA Tesla T4 GPUs, Selkies 2.1.0 60 FPS WebSockets streaming, and multi-storefront integration.
+A cloud gaming and game-development visual test bench running on Kaggle with an NVIDIA Tesla T4, Selkies 2.1.0 streaming, and multi-storefront integration. GPU video encoding works in the observed container; 3D game rendering currently falls back to the CPU.
 
 [![Kaggle Notebook](https://img.shields.io/badge/Kaggle-Interactive%20GPU%20Bench-20BEFF?logo=kaggle)](https://www.kaggle.com/code/mohammedbastawy/interactive-gpu-game-development-bench-20261023)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
@@ -56,8 +56,8 @@ Then start the Selkies session using the provided starter.
 ## Storefront Integration & WineD3D
 
 * **Epic Games Dual Frontends**: 
-  * **Heroic Games Launcher**: Full graphical Electron UI for library browsing and OAuth authentication. Pre-configured with automatic sanitization to disable DXVK/VKD3D.
-  * **Legendary CLI**: Fast, terminal-based launcher running games directly via **WineD3D** (DirectX translated to OpenGL via Mesa llvmpipe). Verified working for *Wolfenstein: The New Order*, *Borderlands 2*, *Brotato*, etc.
+  * **Heroic Games Launcher**: Full graphical Electron UI for library browsing and OAuth authentication. DXVK is enabled only when its NVIDIA Vulkan path passes the runtime probe.
+  * **Legendary CLI**: Fast, terminal-based launcher using the measured NVIDIA renderer when available. CPU WineD3D is available by explicit opt-in for lightweight titles.
 * **Wine-GE Runner**: Pre-configured `Wine-GE-Proton8-26` runner providing Windows API compatibility and media codecs.
 * **GOG Galaxy**: Minigalaxy GTK for DRM-free Linux and Wine titles.
 * **Lutris**: Multi-storefront aggregator running on Python 3.12.
@@ -68,7 +68,9 @@ Then start the Selkies session using the provided starter.
 ## Hardware Reality & Constraints
 
 * **NVENC 60 FPS Streaming**: Tesla T4 hardware encoder captures Xvfb at 1280×720 @ 60 FPS over WebSockets.
-* **Desktop 3D Graphics**: The observed Kaggle container exposes NVENC but does not expose the NVIDIA display driver and Vulkan ICD needed for game rendering. The launcher now checks the live NVIDIA renderer and refuses an unaccelerated game launch by default, avoiding the previous 100% CPU stall. `GAMELAB_ALLOW_SOFTWARE=1` explicitly opts into llvmpipe for light games.
+* **Desktop 3D Graphics**: Version 28 exposes compute and NVENC, but its observed NVIDIA OpenGL and Vulkan probes fail; Xvfb renders through llvmpipe. The launcher refuses an unaccelerated game launch by default. `GAMELAB_ALLOW_SOFTWARE=1` opts into a CPU profile for light games and basic tests; it cannot make modern AAA games playable.
+
+See [GPU deployment and CPU fallback](GPU_DEPLOYMENT.md) for the Version 28 diagnosis, one final headless EGL test, and portable GPU host requirements.
 
 ## NVIDIA 3D deployment and verification
 
@@ -93,5 +95,5 @@ vulkaninfo --summary                     # deviceName must be NVIDIA Tesla T4
 nvidia-smi dmon -s u                     # inspect 3D/graphics utilization during a game
 ```
 
-`direct_gl` or `virtualgl` must be true for GPU WineD3D. `vulkan_window`, `vulkan_32bit_loader`, and `dxvk_files` must all be true for DXVK. `nvidia_32bit_gl` must be true for 32-bit games. NVENC activity and a 60 FPS stream alone do not establish game frame rate or GPU rasterization. If Kaggle still omits `/dev/nvidia-modeset`, the NVIDIA Xorg/VirtualGL route cannot start there; if it omits the graphics ICD or Vulkan window support, DXVK cannot run there. `__NV_PRIME_RENDER_OFFLOAD`, `__GLX_VENDOR_LIBRARY_NAME`, `LD_PRELOAD`, and a hand-written `nvidia_icd.json` cannot supply driver libraries or device access that the host withheld.
+`direct_gl` or `virtualgl` must be true for GPU WineD3D. `egl_device` checks NVIDIA's display-independent EGL path separately. `vulkan_window`, `vulkan_32bit_loader`, and `dxvk_files` must all be true for DXVK. `nvidia_32bit_gl` must be true for 32-bit games. NVENC activity and a 60 FPS stream alone do not establish game frame rate or GPU rasterization. Missing `/dev/nvidia-modeset` blocks the Xorg path, but does not alone rule out EGL device rendering. `__NV_PRIME_RENDER_OFFLOAD`, `__GLX_VENDOR_LIBRARY_NAME`, `LD_PRELOAD`, and a hand-written `nvidia_icd.json` cannot supply driver libraries or device access that the host withheld.
 * **Controller Support**: 4 virtual Xbox 360 controllers enumerated via Selkies input interposer without `/dev/uinput`.

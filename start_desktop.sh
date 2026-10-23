@@ -55,6 +55,9 @@ if [ "$(id -u)" -eq 0 ]; then
     exec runuser -u gamer -- env -u DBUS_SESSION_BUS_ADDRESS DISPLAY="$DISPLAY" HOME=/home/gamer PATH="$PATH" \
         XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-}" SDL_AUDIODRIVER=pulse \
         PULSE_SERVER="${PULSE_SERVER:-}" SELKIES_JS_SOCKET_PATH="${SELKIES_JS_SOCKET_PATH:-}" \
+        GAMELAB_ALLOW_SOFTWARE="${GAMELAB_ALLOW_SOFTWARE:-0}" \
+        GAMELAB_SOFTWARE_RESOLUTION="${GAMELAB_SOFTWARE_RESOLUTION:-854x480}" \
+        LP_NUM_THREADS="${LP_NUM_THREADS:-}" \
         LD_PRELOAD="$LD_PRELOAD" SDL_JOYSTICK_DISABLE_UDEV=1 \
         SDL_JOYSTICK_DEVICE="$SDL_JOYSTICK_DEVICE" \
         dbus-run-session -- /usr/bin/env python3 /tmp/kaggle-game-dev-bench/dev_launcher.py
