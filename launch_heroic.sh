@@ -1,4 +1,7 @@
 #!/bin/bash
+set -e
+sudo -n /bin/bash /tmp/kaggle-game-dev-bench/ensure_gaming.sh
+sudo -n /bin/bash /tmp/kaggle-game-dev-bench/ensure_storefront.sh heroic
 export DISPLAY="${DISPLAY:-:0}"
 export PATH="/usr/games:/usr/local/bin:/usr/bin:$PATH"
 export SDL_AUDIODRIVER=pulse
@@ -18,8 +21,6 @@ fi
 
 # Automatically sanitize Heroic configuration and clean DXVK DLLs before launch
 python3 /tmp/kaggle-game-dev-bench/fix_heroic_config.py >> "$LOG" 2>&1
-chown -R gamer:gamer /home/gamer 2>/dev/null || true
-chmod -R u+rwX /home/gamer 2>/dev/null || true
 
 echo "Starting Heroic as user gamer at $(date)..." >> "$LOG"
 HEROIC_PREFIX=()

@@ -25,11 +25,8 @@ if [ -z "${PULSE_SERVER:-}" ]; then
     done
 fi
 
-# Xvfb remains the Selkies capture desktop. A separate NVIDIA Xorg display is
-# used only when the host mounted the display driver and a renderer test passes.
-if [ "$(id -u)" -eq 0 ]; then
-    /bin/bash /tmp/kaggle-game-dev-bench/gpu_xorg.sh || true
-fi
+# The optional NVIDIA GLX display is prepared on first game launch. The
+# desktop appears immediately on Xvfb; Kaggle's verified game path uses egl0.
 
 # Grant unprivileged gamer user access to X11 display
 xhost +si:localuser:gamer 2>/dev/null || true
@@ -88,6 +85,8 @@ if [ "$(id -u)" -eq 0 ]; then
         XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-}" SDL_AUDIODRIVER=pulse \
         PULSE_SERVER="${PULSE_SERVER:-}" SELKIES_JS_SOCKET_PATH="${SELKIES_JS_SOCKET_PATH:-}" \
         GAMELAB_ALLOW_SOFTWARE="${GAMELAB_ALLOW_SOFTWARE:-0}" \
+        GAMELAB_GRAPHICS_BACKEND="${GAMELAB_GRAPHICS_BACKEND:-auto}" \
+        GAMELAB_VGL_FPS="${GAMELAB_VGL_FPS:-60}" \
         GAMELAB_SOFTWARE_RESOLUTION="${GAMELAB_SOFTWARE_RESOLUTION:-854x480}" \
         LP_NUM_THREADS="${LP_NUM_THREADS:-}" \
         LD_LIBRARY_PATH="${LD_LIBRARY_PATH:-}" \

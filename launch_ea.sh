@@ -1,11 +1,12 @@
 #!/bin/bash
+set -e
+sudo -n /bin/bash /tmp/kaggle-game-dev-bench/ensure_gaming.sh
 export DISPLAY="${DISPLAY:-:0}"
 export PATH="/usr/games:/usr/local/bin:/usr/bin:$PATH"
 export WINEPREFIX="/home/gamer/ea-prefix"
 export WINEARCH=win64
 export WINEDLLOVERRIDES="mscoree,mshtml="
 mkdir -p "$WINEPREFIX" /tmp/ea-store /home/gamer/logs
-chown -R gamer:gamer "$WINEPREFIX" /home/gamer/logs 2>/dev/null || true
 
 LOG="/home/gamer/logs/ea.log"
 echo "Starting EA App runner at $(date)..." >> "$LOG"
@@ -25,7 +26,8 @@ else
     TARGET="$EA_INSTALLER"
 fi
 
-exec runuser -u gamer -- env \
+if [ "$(id -u)" -eq 0 ]; then USER_PREFIX=(runuser -u gamer --); else USER_PREFIX=(); fi
+exec "${USER_PREFIX[@]}" env \
     DISPLAY="$DISPLAY" \
     PATH="$PATH" \
     WINEPREFIX="$WINEPREFIX" \

@@ -1,4 +1,6 @@
 #!/bin/bash
+set -e
+sudo -n /bin/bash /tmp/kaggle-game-dev-bench/ensure_storefront.sh steam
 export DISPLAY="${DISPLAY:-:0}"
 export PATH="/usr/games:/usr/local/bin:/usr/bin:$PATH"
 export SDL_AUDIODRIVER=pulse
@@ -12,7 +14,8 @@ LOG="/home/gamer/logs/steam.log"
 STEAM_BIN=$(which steam 2>/dev/null || echo /usr/games/steam)
 
 echo "Starting Steam as user gamer at $(date)..." >> "$LOG"
-exec runuser -u gamer -- env \
+if [ "$(id -u)" -eq 0 ]; then USER_PREFIX=(runuser -u gamer --); else USER_PREFIX=(); fi
+exec "${USER_PREFIX[@]}" env \
     DISPLAY="$DISPLAY" \
     PATH="$PATH" \
     SDL_AUDIODRIVER=pulse \

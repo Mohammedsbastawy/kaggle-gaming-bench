@@ -1,4 +1,6 @@
 #!/bin/bash
+set -e
+sudo -n /bin/bash /tmp/kaggle-game-dev-bench/ensure_storefront.sh legendary
 export DISPLAY="${DISPLAY:-:0}"
 export PATH="/usr/games:/usr/local/bin:/usr/bin:$PATH"
 export HOME="/home/gamer"

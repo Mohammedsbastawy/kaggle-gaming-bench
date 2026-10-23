@@ -13,13 +13,13 @@ from aiohttp import web
 from game_catalog import discover_games
 
 
-BENCH = Path("/tmp/kaggle-game-dev-bench")
-STATE = BENCH / "active-game.json"
+STATE = Path("/home/gamer/.local/state/7bz/active-game.json")
 PORT = int(os.environ.get("SEVEN_BZ_CONTROL_PORT", "8766"))
 
 
 def write_active_game(pid: int, pgid: int, title: str, source: str) -> None:
     """Record a dashboard-launched process after validating its identity."""
+    STATE.parent.mkdir(parents=True, exist_ok=True)
     STATE.write_text(json.dumps({"pid": pid, "pgid": pgid, "title": title,
                                  "source": source, "started": time.time()}), encoding="utf-8")
 

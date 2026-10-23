@@ -1,0 +1,4 @@
+5e75dfd20e6a5c8afb4795d4bc354aa18771882ad67794a02335df5be281c670  lib/i386-linux-gnu/selkies_fake_udev.so
+053d2a13c82f533bb0ed2caa2d3d4ff858d85e33f401ba6342198b71c3cb7b5e  lib/i386-linux-gnu/selkies_input_interposer.so
+f590697a2202253352bca8bc9bd70baa055426b20c24734c446a877d5b41f643  lib/x86_64-linux-gnu/selkies_fake_udev.so
+2ad074397d349bcb211ac5af6a09334653c4a5dd5af2216bbd757a7c7a9b3540  lib/x86_64-linux-gnu/selkies_input_interposer.so

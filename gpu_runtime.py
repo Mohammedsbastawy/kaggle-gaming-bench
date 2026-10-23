@@ -285,6 +285,21 @@ def select_graphics_backend(facts, preference="auto"):
 
 
 def launch(app, wine):
+    installer = ["/bin/bash", "/tmp/kaggle-game-dev-bench/ensure_gaming.sh"]
+    if os.geteuid() != 0:
+        installer = ["sudo", "-n", *installer]
+    try:
+        prepared = subprocess.run(installer, env=clean_env(), timeout=1800,
+                                  check=False)
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        print(f"Game compatibility preparation failed: {exc}", file=sys.stderr)
+        return 78
+    if prepared.returncode != 0:
+        print("Game compatibility preparation failed; see setup output", file=sys.stderr)
+        return 78
+    preferred_wine = Path("/home/gamer/.config/heroic/tools/wine/Wine-GE-Proton8-26/bin/wine")
+    if wine == "/usr/bin/wine" and preferred_wine.is_file():
+        wine = str(preferred_wine)
     facts = diagnose()
     env = clean_env()
     env["WINEPREFIX"] = os.environ.get("WINEPREFIX", "/home/gamer/.wine")

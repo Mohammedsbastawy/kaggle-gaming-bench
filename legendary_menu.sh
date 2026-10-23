@@ -54,6 +54,11 @@ while true; do
             echo ""
             read -p "Enter Game App Name (from the list above): " appname
             if [ -n "$appname" ]; then
+                if ! sudo -n /bin/bash /tmp/kaggle-game-dev-bench/ensure_gaming.sh; then
+                    echo "Game compatibility preparation failed."
+                    read -p "Press Enter to return to menu..."
+                    continue
+                fi
                 WINE_BIN=""
                 for candidate in "/home/gamer/.config/heroic/tools/wine/Wine-GE-Proton8-26/bin/wine" \
                                  /home/gamer/.config/heroic/tools/wine/*/bin/wine \
