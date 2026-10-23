@@ -416,6 +416,10 @@ class LegendaryApp(tk.Tk):
         env["DISPLAY"] = os.environ.get("DISPLAY", ":0")
         env["HOME"] = str(HOME)
         env["WINEPREFIX"] = str(HOME / ".wine")
+        env["MESA_GL_VERSION_OVERRIDE"] = "4.5COMPAT"
+        env["MESA_GLSL_VERSION_OVERRIDE"] = "450"
+        env["CUDA_VISIBLE_DEVICES"] = "0"
+        env["VGL_DISPLAY"] = "egl0"
 
         # Automatically verify and heal Wine prefix before launch if kernel32.dll is missing
         kernel32 = HOME / ".wine/drive_c/windows/system32/kernel32.dll"

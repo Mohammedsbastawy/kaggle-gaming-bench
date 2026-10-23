@@ -261,6 +261,45 @@ def unreal_shipping_binary(app):
     return matches[0] if matches else None
 
 
+def find_game_binary(app):
+    """Find the game's actual executable binary (supporting UE, id Tech, Unity, custom engines)."""
+    ue_shipping = unreal_shipping_binary(app)
+    if ue_shipping:
+        return ue_shipping
+
+    home = Path(os.environ.get("KAGGLE_GAMER_HOME", "/home/gamer"))
+    for installed_file in (
+        home / ".config/heroic/legendaryConfig/legendary/installed.json",
+        home / ".config/legendary/installed.json",
+    ):
+        try:
+            record = json.loads(installed_file.read_text(encoding="utf-8")).get(app, {})
+            install_path = Path(record.get("install_path") or record.get("installPath") or "")
+            exe_rel = record.get("executable") or ""
+            if install_path.is_dir() and exe_rel:
+                candidate = install_path / exe_rel
+                if candidate.is_file():
+                    return candidate
+        except Exception:
+            pass
+
+    install = legendary_install_path(app)
+    if install and install.is_dir():
+        candidates = []
+        for p in install.rglob("*.exe"):
+            low = p.name.lower()
+            if any(skip in low for skip in ("prereq", "redist", "crash", "unins", "setup", "dxsetup", "vcredist")):
+                continue
+            candidates.append(p)
+        if candidates:
+            candidates.sort(key=lambda p: (
+                0 if ("x64" in p.name.lower() or "64" in p.name.lower()) else 1,
+                len(p.parts)
+            ))
+            return candidates[0]
+    return None
+
+
 def get_input_mode() -> str:
     """Read the active input mode (mouse_keyboard or gamepad)."""
     mode_file = Path("/tmp/kaggle-game-dev-bench/input-mode.json")
@@ -295,13 +334,13 @@ def configure_mouse(wine_bin, env):
             pass
 
 
-def select_graphics_backend(facts, preference="auto"):
+def select_graphics_backend(facts, preference="auto", is_64bit=True):
     """Select only paths whose required presentation probe succeeded."""
     if preference not in ("auto", "dxvk", "wined3d"):
         raise ValueError("GAMELAB_GRAPHICS_BACKEND must be auto, dxvk, or wined3d")
-    dxvk_ready = (facts["vulkan_window"] and facts["vulkan_32bit_loader"]
+    dxvk_ready = (facts["vulkan_window"] and (facts["vulkan_32bit_loader"] or is_64bit)
                   and facts["dxvk_files"])
-    gl_ready = facts["nvidia_32bit_gl"]
+    gl_ready = facts["nvidia_32bit_gl"] or is_64bit
     if preference == "dxvk":
         if not dxvk_ready:
             raise RuntimeError("DXVK requires a working Vulkan X11 swapchain, 32-bit loader, and both DLL sets")
@@ -313,6 +352,8 @@ def select_graphics_backend(facts, preference="auto"):
     if facts["virtualgl"] and gl_ready:
         return "virtualgl"
     if preference == "wined3d":
+        if facts["virtualgl"] and gl_ready:
+            return "virtualgl"
         raise RuntimeError("WineD3D requires verified NVIDIA GL and 32-bit GL libraries")
     return "software"
 
@@ -335,6 +376,11 @@ def launch(app, wine):
     env["WINE_FULLSCREEN_FSR_STRENGTH"] = "2"
     env["VKD3D_CONFIG"] = "dxr11,dxr"
     env["VKD3D_FEATURE_LEVEL"] = "12_1"
+
+    # Guarantee full OpenGL 4.5 Compatibility Profile & WGL extensions for Wine/idTech
+    env["MESA_GL_VERSION_OVERRIDE"] = "4.5COMPAT"
+    env["MESA_GLSL_VERSION_OVERRIDE"] = "450"
+
     if not env.get("PULSE_SERVER"):
         for candidate in ("/run/user/1000/pulse/native", "/tmp/pulse-PKdhtXMmr18n/native"):
             if Path(candidate).exists():
@@ -368,14 +414,40 @@ def launch(app, wine):
         interposer = "/tmp/kaggle-game-dev-bench/$LIB/selkies_input_interposer.so:/tmp/kaggle-game-dev-bench/$LIB/selkies_fake_udev.so"
         env["LD_PRELOAD"] = os.environ.get("LD_PRELOAD", interposer)
 
-    shipping = unreal_shipping_binary(app)
-    launch_cwd = str(shipping.parent) if shipping else None
-    command = [wine_bin, str(shipping)] if shipping and wine_bin else ["legendary", "launch", app, "--wine", wine]
-    if shipping:
-        print(f"Unreal Engine Shipping binary: {shipping}", flush=True)
+    target_bin = find_game_binary(app)
+    is_64bit = True
+    if target_bin and "32" in target_bin.name.lower() and "64" not in target_bin.name.lower():
+        is_64bit = False
+    launch_cwd = str(target_bin.parent) if target_bin else None
+
+    vgl = shutil.which("vglrun") or "/opt/VirtualGL/bin/vglrun"
+    vgl_ready = Path(vgl).is_file() and (facts.get("virtualgl") or facts.get("egl_device"))
+    vgl_display = facts.get("virtualgl_display") or facts.get("egl_device_display") or "egl0"
+
+    if vgl_ready:
+        env.update(VGL_READBACK="pbo", VGL_SPOIL="1", VGL_SYNC="0", VGL_COMPRESS="proxy")
+        vgl_fps = os.environ.get("GAMELAB_VGL_FPS", "60")
+        try:
+            if 0 <= float(vgl_fps) <= 240:
+                env["VGL_FPS"] = vgl_fps
+        except ValueError:
+            pass
+
+    if target_bin and wine_bin:
+        print(f"Target game binary detected: {target_bin}", flush=True)
+        if vgl_ready:
+            command = [vgl, "-d", vgl_display, wine_bin, str(target_bin)]
+        else:
+            command = [wine_bin, str(target_bin)]
+    else:
+        if vgl_ready:
+            command = ["legendary", "launch", app, "--wine", wine, "--wrapper", f"{vgl} -d {vgl_display}"]
+        else:
+            command = ["legendary", "launch", app, "--wine", wine]
+
     try:
         selected = select_graphics_backend(
-            facts, os.environ.get("GAMELAB_GRAPHICS_BACKEND", "auto"))
+            facts, os.environ.get("GAMELAB_GRAPHICS_BACKEND", "auto"), is_64bit=is_64bit)
     except (ValueError, RuntimeError) as exc:
         print(f"Graphics backend unavailable: {exc}", file=sys.stderr)
         return 78
@@ -391,26 +463,12 @@ def launch(app, wine):
             print(f"VKD3D setup notice: {exc}", file=sys.stderr)
         env["WINEDLLOVERRIDES"] = "d3d12,d3d12core,d3d11,dxgi,d3d9,d3d10core=n,b;mscoree,mshtml=d"
         env["DXVK_HUD"] = "devinfo,fps"
-        backend = "NVIDIA Vulkan through DXVK & VKD3D (GPU 0)"
+        backend = "NVIDIA Vulkan through DXVK & VKD3D + VirtualGL (GPU 0)"
     elif selected == "direct_gl":
         backend = "NVIDIA OpenGL"
     elif selected == "virtualgl":
-        display = facts["virtualgl_display"]
+        display = facts.get("virtualgl_display") or "egl0"
         backend = f"NVIDIA OpenGL through VirtualGL ({display})"
-        env.update(VGL_READBACK="pbo", VGL_SPOIL="1", VGL_SYNC="0",
-                   VGL_COMPRESS="proxy")
-        vgl_fps = os.environ.get("GAMELAB_VGL_FPS", "60")
-        try:
-            if not 0 <= float(vgl_fps) <= 240:
-                raise ValueError
-        except ValueError:
-            print("GAMELAB_VGL_FPS must be between 0 and 240", file=sys.stderr)
-            return 78
-        env["VGL_FPS"] = vgl_fps
-        vgl = shutil.which("vglrun") or "/opt/VirtualGL/bin/vglrun"
-        command = ([vgl, "-d", display, *command] if shipping else
-                   ["legendary", "launch", app, "--wine", wine,
-                    "--wrapper", f"{vgl} -d {display}"])
     elif os.environ.get("GAMELAB_ALLOW_SOFTWARE") == "1":
         backend = "Mesa software (explicit opt-in)"
         env["WINEDLLOVERRIDES"] = "d3d11,dxgi,d3d9,d3d10core=b;mscoree,mshtml=d"

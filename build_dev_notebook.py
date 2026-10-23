@@ -63,6 +63,10 @@ else:
 # Use the setup bundled with this notebook, including its GPU driver probes.
 # The public repository can lag behind a newly uploaded notebook version.
 setup_sh.write_text(''' + repr(setup_sh_code) + r''', encoding='utf-8')
+probe_sh = BENCH / 'probe_nvidia_userspace.sh'
+probe_sh.write_text(''' + repr(probe_nvidia_userspace_code) + r''', encoding='utf-8')
+probe_sh.chmod(0o755)
+(BENCH / 'gpu_runtime.py').write_text(''' + repr(gpu_runtime_code) + r''', encoding='utf-8')
 
 # 3. Execute setup.sh with live output streaming
 setup_sh.chmod(0o755)

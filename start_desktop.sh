@@ -4,6 +4,8 @@
 export CUDA_VISIBLE_DEVICES=0
 export DRI_PRIME=0
 export VGL_DISPLAY=egl0
+export MESA_GL_VERSION_OVERRIDE=4.5COMPAT
+export MESA_GLSL_VERSION_OVERRIDE=450
 
 export LD_PRELOAD='/tmp/kaggle-game-dev-bench/$LIB/selkies_input_interposer.so:/tmp/kaggle-game-dev-bench/$LIB/selkies_fake_udev.so'
 export SDL_AUDIODRIVER=pulse
