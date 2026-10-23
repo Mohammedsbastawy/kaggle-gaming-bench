@@ -483,14 +483,20 @@ def launch(app, wine):
         is_64bit = False
     launch_cwd = str(target_bin.parent) if target_bin else None
 
+    # Switch to 64-bit Wine binary for 64-bit binaries to prevent 32-bit wrapper dropping 64-bit VGL faker
+    if is_64bit and wine_bin:
+        wine64_candidate = Path(wine_bin).with_name("wine64")
+        if wine64_candidate.is_file():
+            wine_bin = str(wine64_candidate)
+
     vgl = shutil.which("vglrun") or "/opt/VirtualGL/bin/vglrun"
     vgl_ready = Path(vgl).is_file() and (facts.get("virtualgl") or facts.get("egl_device"))
     vgl_display = facts.get("virtualgl_display") or facts.get("egl_device_display") or "egl0"
 
-    # Create single-binary wrapper script without spaces for any launcher
+    # Create single-binary wrapper script with -dl for dlopen interposition
     wrap_script = Path("/tmp/kaggle-game-dev-bench/vgl-wrap.sh")
     try:
-        wrap_script.write_text(f"#!/bin/bash\nexec {vgl} -d {vgl_display} \"$@\"\n", encoding="utf-8")
+        wrap_script.write_text(f"#!/bin/bash\nexec {vgl} -d {vgl_display} -dl \"$@\"\n", encoding="utf-8")
         wrap_script.chmod(0o755)
     except Exception:
         pass
@@ -511,9 +517,9 @@ def launch(app, wine):
     else:
         command = ["legendary", "launch", app, "--wine", wine, "--wrapper", str(wrap_script)]
 
-    # Prepend vglrun so the entire process tree inherits hardware OpenGL acceleration
+    # Prepend vglrun with -dl so the entire process tree inherits hardware OpenGL acceleration
     if vgl_ready:
-        command = [vgl, "-d", vgl_display, *command]
+        command = [vgl, "-d", vgl_display, "-dl", *command]
 
     try:
         selected = select_graphics_backend(

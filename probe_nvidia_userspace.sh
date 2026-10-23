@@ -36,10 +36,10 @@ if [ "$(id -u)" -eq 0 ]; then
             echo "▶ Found matching repository package: $pkg. Installing userspace libraries..."
             apt-get install -y --no-install-recommends \
                 -o DPkg::Lock::Timeout=120 -o APT::Get::Assume-Yes=true \
-                "$pkg" "${pkg}:i386" vulkan-tools 2>/dev/null || \
+                "$pkg" "${pkg}:i386" vulkan-tools libgl1-mesa-dri mesa-utils 2>/dev/null || \
             apt-get install -y --no-install-recommends \
                 -o DPkg::Lock::Timeout=120 -o APT::Get::Assume-Yes=true \
-                "$pkg" vulkan-tools 2>/dev/null || true
+                "$pkg" vulkan-tools libgl1-mesa-dri mesa-utils 2>/dev/null || true
             break
         fi
     done
