@@ -7,15 +7,11 @@ export SDL_JOYSTICK_DEVICE=/dev/input/event1000:/dev/input/event1001:/dev/input/
 export DISPLAY="${DISPLAY:-:0}"
 export PATH="/usr/games:/usr/local/bin:/usr/bin:$PATH"
 
-# Opt-in only after the isolated probe confirms an NVIDIA EGL renderer.
-if [ "${GAMELAB_USE_INJECTED_DRIVER:-0}" = 1 ]; then
-    probe_env=/tmp/kaggle-game-dev-bench/nvidia-userspace-probe/env.sh
-    if [ -f "$probe_env" ]; then
-        # shellcheck disable=SC1090
-        . "$probe_env"
-    else
-        echo "Requested injected driver, but $probe_env is absent" >&2
-    fi
+# Load NVIDIA userspace driver environment if available
+probe_env=/tmp/kaggle-game-dev-bench/nvidia-userspace-probe/env.sh
+if [ -f "$probe_env" ]; then
+    # shellcheck disable=SC1090
+    . "$probe_env"
 fi
 printf '%s' "${XAUTHORITY:-}" > /tmp/kaggle-game-dev-bench/xauthority-path
 printf '%s' "${PULSE_SERVER:-}" > /tmp/kaggle-game-dev-bench/pulse-server-path

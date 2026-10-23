@@ -240,7 +240,31 @@ if [ ! -f "$BENCH/lib/x86_64-linux-gnu/selkies_input_interposer.so" ]; then
     fi
 fi
 
-# 15. Set permissions and ownership
+# 15. Automatic NVIDIA Tesla T4 userspace driver extraction and registration
+if [ -c /dev/nvidiactl ] && [ -c /dev/nvidia0 ]; then
+    echo "▶ Initializing NVIDIA Tesla T4 userspace driver and EGL offscreen bridge..."
+    if [ -f "$BENCH/probe_nvidia_userspace.sh" ]; then
+        bash "$BENCH/probe_nvidia_userspace.sh" 2>/dev/null || true
+    fi
+    work="$BENCH/nvidia-userspace-probe"
+    if [ -d "$work/lib64" ]; then
+        mkdir -p /usr/share/glvnd/egl_vendor.d /etc/vulkan/icd.d
+        [ -f "$work/10_nvidia.json" ] && cp -f "$work/10_nvidia.json" /usr/share/glvnd/egl_vendor.d/10_nvidia.json 2>/dev/null || true
+        [ -f "$work/nvidia_icd.json" ] && cp -f "$work/nvidia_icd.json" /etc/vulkan/icd.d/nvidia_icd.json 2>/dev/null || true
+        echo "$work/lib64" > /etc/ld.so.conf.d/nvidia-gpu.conf
+        [ -d "$work/lib32" ] && echo "$work/lib32" >> /etc/ld.so.conf.d/nvidia-gpu.conf
+        ldconfig 2>/dev/null || true
+        echo "✓ NVIDIA userspace driver registered in system linker."
+    fi
+fi
+
+# 16. Configure Wine DirectInput mouse warping for FPS games
+if [ -d "/home/gamer/.wine" ]; then
+    echo "▶ Configuring Wine DirectInput mouse handling for FPS games..."
+    runuser -u gamer -- env WINEPREFIX=/home/gamer/.wine wine reg add "HKEY_CURRENT_USER\Software\Wine\DirectInput" /v MouseWarpOverride /t REG_SZ /d disable /f 2>/dev/null || true
+fi
+
+# 17. Set permissions and ownership
 chmod -R 755 "$BENCH"/*.sh 2>/dev/null || true
 chmod -R 777 "$BENCH" 2>/dev/null || true
 chown -R gamer:gamer /home/gamer 2>/dev/null || true

@@ -107,6 +107,17 @@ fi
     printf 'export GAMELAB_NVIDIA_LIB32=%q\n' "$lib32"
 } > "$work/env.sh"
 
+if [ "$(id -u)" -eq 0 ]; then
+    mkdir -p /usr/share/glvnd/egl_vendor.d /etc/vulkan/icd.d
+    cp -f "$work/10_nvidia.json" /usr/share/glvnd/egl_vendor.d/10_nvidia.json 2>/dev/null || true
+    cp -f "$selected_icd" /etc/vulkan/icd.d/nvidia_icd.json 2>/dev/null || true
+    echo "$lib64" > /etc/ld.so.conf.d/nvidia-gpu.conf
+    if [[ -d "$lib32" ]]; then
+        echo "$lib32" >> /etc/ld.so.conf.d/nvidia-gpu.conf
+    fi
+    ldconfig 2>/dev/null || true
+fi
+
 echo "Isolated driver environment: $work/env.sh"
 echo "Selected Vulkan ICD: $selected_icd"
 echo "32-bit GL library: $(if [[ -f "$lib32/libGLX_nvidia.so.0" ]]; then echo present; else echo missing; fi)"
