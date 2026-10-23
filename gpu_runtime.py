@@ -264,39 +264,87 @@ def unreal_shipping_binary(app):
 def find_game_binary(app):
     """Find the game's actual executable binary (supporting UE, id Tech, Unity, custom engines)."""
     ue_shipping = unreal_shipping_binary(app)
-    if ue_shipping:
+    if ue_shipping and ue_shipping.is_file():
         return ue_shipping
 
     home = Path(os.environ.get("KAGGLE_GAMER_HOME", "/home/gamer"))
+    install_candidates = []
+
+    # Check installed.json metadata (exact key match, then fuzzy/case-insensitive match)
     for installed_file in (
         home / ".config/heroic/legendaryConfig/legendary/installed.json",
         home / ".config/legendary/installed.json",
     ):
         try:
-            record = json.loads(installed_file.read_text(encoding="utf-8")).get(app, {})
-            install_path = Path(record.get("install_path") or record.get("installPath") or "")
-            exe_rel = record.get("executable") or ""
-            if install_path.is_dir() and exe_rel:
-                candidate = install_path / exe_rel
-                if candidate.is_file():
-                    return candidate
+            data = json.loads(installed_file.read_text(encoding="utf-8"))
+            if app in data:
+                record = data[app]
+                ip = Path(record.get("install_path") or record.get("installPath") or "")
+                ex = record.get("executable") or ""
+                if ip.is_dir():
+                    if ex and (ip / ex).is_file():
+                        return ip / ex
+                    for p in ip.rglob("*.exe"):
+                        low = p.name.lower()
+                        if any(skip in low for skip in ("prereq", "redist", "crash", "unins", "setup", "dxsetup", "vcredist", "epicgameslauncher")):
+                            continue
+                        if ex and p.name.lower() == Path(ex).name.lower():
+                            return p
+                        if "x64" in low or "wolf" in low:
+                            return p
+                    install_candidates.append(ip)
+            for key, record in data.items():
+                if not isinstance(record, dict):
+                    continue
+                k_low = key.lower()
+                a_low = app.lower()
+                t_low = str(record.get("title", "")).lower()
+                if a_low in k_low or k_low in a_low or a_low in t_low:
+                    ip = Path(record.get("install_path") or record.get("installPath") or "")
+                    ex = record.get("executable") or ""
+                    if ip.is_dir():
+                        if ex and (ip / ex).is_file():
+                            return ip / ex
+                        for p in ip.rglob("*.exe"):
+                            low = p.name.lower()
+                            if any(skip in low for skip in ("prereq", "redist", "crash", "unins", "setup", "dxsetup", "vcredist", "epicgameslauncher")):
+                                continue
+                            if ex and p.name.lower() == Path(ex).name.lower():
+                                return p
+                            if "x64" in low or "wolf" in low:
+                                return p
+                        install_candidates.append(ip)
         except Exception:
             pass
 
-    install = legendary_install_path(app)
-    if install and install.is_dir():
-        candidates = []
-        for p in install.rglob("*.exe"):
-            low = p.name.lower()
-            if any(skip in low for skip in ("prereq", "redist", "crash", "unins", "setup", "dxsetup", "vcredist")):
-                continue
-            candidates.append(p)
-        if candidates:
-            candidates.sort(key=lambda p: (
-                0 if ("x64" in p.name.lower() or "64" in p.name.lower()) else 1,
-                len(p.parts)
-            ))
-            return candidates[0]
+    install_candidates.extend([
+        home / "game-builds",
+        home / ".wine/drive_c/Program Files",
+        home / ".wine/drive_c/Program Files (x86)",
+        Path("/kaggle/working"),
+    ])
+
+    found_exes = []
+    for root in install_candidates:
+        if not root.is_dir():
+            continue
+        try:
+            for p in root.rglob("*.exe"):
+                low = p.name.lower()
+                if any(skip in low for skip in ("prereq", "redist", "crash", "unins", "setup", "dxsetup", "vcredist", "epicgameslauncher")):
+                    continue
+                found_exes.append(p)
+        except Exception:
+            pass
+
+    if found_exes:
+        a_low = app.lower()
+        found_exes.sort(key=lambda p: (
+            0 if a_low in p.name.lower() else 1,
+            0 if ("x64" in p.name.lower() or "64" in p.name.lower()) else 1,
+            len(p.parts)
+        ))
+        return found_exes[0]
     return None
 
 
@@ -380,6 +428,21 @@ def launch(app, wine):
     # Guarantee full OpenGL 4.5 Compatibility Profile & WGL extensions for Wine/idTech
     env["MESA_GL_VERSION_OVERRIDE"] = "4.5COMPAT"
     env["MESA_GLSL_VERSION_OVERRIDE"] = "450"
+    env["__NV_PRIME_RENDER_OFFLOAD"] = "1"
+    env["__GLX_VENDOR_LIBRARY_NAME"] = "nvidia"
+    if not env.get("DISPLAY"):
+        env["DISPLAY"] = ":0"
+
+    # Propagate hardware profile to Legendary configuration
+    try:
+        leg_cfg_path = Path(env["HOME"]) / ".config/legendary/config.ini"
+        leg_cfg_path.parent.mkdir(parents=True, exist_ok=True)
+        current_cfg = leg_cfg_path.read_text(encoding="utf-8") if leg_cfg_path.is_file() else ""
+        if "[default.env]" not in current_cfg:
+            with leg_cfg_path.open("a", encoding="utf-8") as f:
+                f.write("\n[default.env]\nVGL_DISPLAY = egl0\nMESA_GL_VERSION_OVERRIDE = 4.5COMPAT\nMESA_GLSL_VERSION_OVERRIDE = 450\n__NV_PRIME_RENDER_OFFLOAD = 1\n__GLX_VENDOR_LIBRARY_NAME = nvidia\n")
+    except Exception:
+        pass
 
     if not env.get("PULSE_SERVER"):
         for candidate in ("/run/user/1000/pulse/native", "/tmp/pulse-PKdhtXMmr18n/native"):
@@ -446,7 +509,7 @@ def launch(app, wine):
         print(f"Target game binary detected: {target_bin}", flush=True)
         command = [wine_bin, str(target_bin)]
     else:
-        command = ["legendary", "launch", app, "--wine", wine]
+        command = ["legendary", "launch", app, "--wine", wine, "--wrapper", str(wrap_script)]
 
     # Prepend vglrun so the entire process tree inherits hardware OpenGL acceleration
     if vgl_ready:
