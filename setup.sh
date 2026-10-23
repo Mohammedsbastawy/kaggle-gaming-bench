@@ -187,7 +187,7 @@ fi
 chmod -R 755 "$BENCH"/*.sh 2>/dev/null || true
 chmod -R 777 "$BENCH" 2>/dev/null || true
 chown -R gamer:gamer /home/gamer 2>/dev/null || true
-chmod -R u+rwX /home/gamer 2>/dev/null || true
+chmod -R 777 /home/gamer 2>/dev/null || true
 
 echo "=========================================================="
 echo "    BENCH ENVIRONMENT SETUP COMPLETED SUCCESSFULLY!       "

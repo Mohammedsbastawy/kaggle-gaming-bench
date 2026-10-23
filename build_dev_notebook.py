@@ -60,8 +60,10 @@ subprocess.run(['useradd', '-m', '-s', '/bin/bash', '-G', 'audio,video', 'gamer'
 gamer_home = Path('/home/gamer')
 for sub in ['.config', '.local', '.steam', 'game-builds', 'logs', 'ea-prefix']:
     (gamer_home / sub).mkdir(parents=True, exist_ok=True)
+
+# Grant open permissions and ensure gamer ownership recursively
 subprocess.run(['chown', '-R', 'gamer:gamer', str(gamer_home)], check=False)
-subprocess.run(['chmod', '-R', 'u+rwX', str(gamer_home)], check=False)
+subprocess.run(['chmod', '-R', '777', str(gamer_home)], check=False)
 subprocess.run(['chmod', '-R', '777', str(BENCH)], check=False)
 
 # 5. Storefront verification audit
