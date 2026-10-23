@@ -11,6 +11,11 @@ mkdir -p /home/gamer/logs
 LOG="/home/gamer/logs/heroic.log"
 HEROIC_BIN=$(which heroic 2>/dev/null || echo /usr/bin/heroic)
 
+# Source auto-optimizer Wine settings if available
+if [ -f /home/gamer/.config/gamelab_wine_env.sh ]; then
+    source /home/gamer/.config/gamelab_wine_env.sh
+fi
+
 # Automatically sanitize Heroic configuration and clean DXVK DLLs before launch
 python3 /tmp/kaggle-game-dev-bench/fix_heroic_config.py >> "$LOG" 2>&1
 chown -R gamer:gamer /home/gamer 2>/dev/null || true

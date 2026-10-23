@@ -418,6 +418,16 @@ class LegendaryApp(tk.Tk):
         env["SDL_AUDIODRIVER"] = "pulse"
         env["HOME"] = "/home/gamer"
 
+        # Source auto-optimizer Wine settings if available
+        wine_env = HOME / '.config/gamelab_wine_env.sh'
+        if wine_env.is_file():
+            for line in wine_env.read_text(encoding='utf-8').splitlines():
+                line = line.strip()
+                if line.startswith('export ') and '=' in line:
+                    kv = line[7:]  # strip 'export '
+                    k, _, v = kv.partition('=')
+                    env[k] = v.strip('"').strip("'")
+
         cmd = ["legendary", "launch", app_name, "--wine", runner]
         self.lbl_status.config(text=f"▶ Running: {title}", fg=self.c_green)
 

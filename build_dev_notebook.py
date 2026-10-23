@@ -7,6 +7,7 @@ launcher_code = (root / 'dev_launcher.py').read_text(encoding='utf-8')
 fix_heroic_code = (root / 'fix_heroic_config.py').read_text(encoding='utf-8')
 legendary_menu_code = (root / 'legendary_menu.sh').read_text(encoding='utf-8')
 legendary_gui_code = (root / 'legendary_gui.py').read_text(encoding='utf-8')
+auto_optimize_code = (root / 'auto_optimize.py').read_text(encoding='utf-8')
 setup_sh_code = (root / 'setup.sh').read_text(encoding='utf-8')
 
 install_script = r'''from pathlib import Path
@@ -338,6 +339,24 @@ else
 fi
 """
 (BENCH / 'launch_legendary.sh').write_text(legendary_sh, encoding='utf-8')
+
+# Auto-Optimizer script and launch wrapper
+(BENCH / 'auto_optimize.py').write_text({repr(auto_optimize_code)}, encoding='utf-8')
+
+optimizer_sh = """#!/bin/bash
+export DISPLAY="${{DISPLAY:-:0}}"
+export PATH="/usr/games:/usr/local/bin:/usr/bin:$PATH"
+export HOME="/home/gamer"
+mkdir -p /home/gamer/logs
+LOG="/home/gamer/logs/auto_optimize.log"
+
+if ! python3 -c "import tkinter" >/dev/null 2>&1; then
+    apt-get update -qq && apt-get install -y -qq python3-tk >> "$LOG" 2>&1 || true
+fi
+
+exec python3 /tmp/kaggle-game-dev-bench/auto_optimize.py >> "$LOG" 2>&1
+"""
+(BENCH / 'launch_optimizer.sh').write_text(optimizer_sh, encoding='utf-8')
 
 # Make all shell scripts executable
 for p in BENCH.glob('*.sh'):

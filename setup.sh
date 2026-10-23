@@ -145,6 +145,17 @@ fi
 # 13. Pre-configure Heroic default settings: disable DXVK/VKD3D/Esync/Fsync
 python3 "$BENCH/fix_heroic_config.py" || true
 
+# 14. Inject keyboard lock into Selkies HTML (prevents Esc from exiting browser fullscreen)
+python3 -c "
+import sys; sys.path.insert(0, '$BENCH')
+try:
+    from auto_optimize import inject_keyboard_lock
+    result = inject_keyboard_lock()
+    if result: print('Keyboard lock injected into:', result)
+    else: print('No Selkies HTML found to patch for keyboard lock.')
+except Exception as e: print('Keyboard lock injection skipped:', e)
+" || true
+
 # 14. Compile Selkies gamepad interposers if not present
 if [ ! -f "$BENCH/lib/x86_64-linux-gnu/selkies_input_interposer.so" ]; then
     SOURCE="$BENCH/selkies-source"

@@ -55,6 +55,17 @@ def resolve_bin(candidates):
 
 STOREFRONTS = [
     {
+        'id': 'optimizer',
+        'badge': 'AUTO',
+        'badge_color': (220, 160, 0),
+        'title': 'Auto-Optimize (تلقائي)',
+        'script': str(BENCH / 'launch_optimizer.sh'),
+        'log': str(LOGS / 'auto_optimize.log'),
+        'desc': 'One-click auto-detect internet speed and apply optimal streaming & rendering quality. Also fixes Esc key exiting browser fullscreen.',
+        'compat': 'Adjusts display resolution, Wine renderer, and keyboard lock automatically.',
+        'cmd': 'python3 /tmp/kaggle-game-dev-bench/auto_optimize.py'
+    },
+    {
         'id': 'steam',
         'badge': 'STM',
         'badge_color': (30, 80, 160),

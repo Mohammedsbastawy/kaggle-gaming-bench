@@ -8,6 +8,11 @@ export BROWSER="/bin/true"
 mkdir -p "$LEGENDARY_CONFIG_PATH" "$HOME/.config/legendary" "$HOME/logs"
 set -o pipefail
 
+# Source auto-optimizer Wine settings if available
+if [ -f "$HOME/.config/gamelab_wine_env.sh" ]; then
+    source "$HOME/.config/gamelab_wine_env.sh"
+fi
+
 # Ensure credentials and configs are synced on startup
 python3 /tmp/kaggle-game-dev-bench/fix_heroic_config.py >/dev/null 2>&1 || true
 
