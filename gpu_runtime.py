@@ -161,6 +161,25 @@ def install_dxvk(prefix):
             os.replace(temporary, target)
 
 
+def install_vkd3d(prefix):
+    """Install VKD3D-Proton (DirectX 12) if available."""
+    candidates = list(Path("/opt/gamelab-vkd3d").glob("vkd3d-proton-*"))
+    if not candidates:
+        return
+    root = candidates[0]
+    for arch, subdir in (("x64", "system32"), ("x86", "syswow64")):
+        src_dir = root / arch
+        if not src_dir.is_dir():
+            continue
+        dst_dir = Path(prefix) / "drive_c/windows" / subdir
+        if not dst_dir.is_dir():
+            continue
+        for name in ("d3d12.dll", "d3d12core.dll"):
+            src_file = src_dir / name
+            if src_file.is_file():
+                shutil.copyfile(src_file, dst_dir / name)
+
+
 def diagnose():
     env = clean_env()
     facts = {
@@ -306,6 +325,16 @@ def launch(app, wine):
     env["SDL_AUDIODRIVER"] = "pulse"
     env["HOME"] = os.environ.get("KAGGLE_GAMER_HOME", "/home/gamer")
     env["__GL_SYNC_TO_VBLANK"] = "0"
+
+    # Dedicate GPU 0 exclusively to 3D rendering and physics simulation
+    env["CUDA_VISIBLE_DEVICES"] = "0"
+    env["DRI_PRIME"] = "0"
+    env["VGL_DISPLAY"] = "egl0"
+    env["DXVK_FILTER_DEVICE_NAME"] = "Tesla T4"
+    env["WINE_FULLSCREEN_FSR"] = "1"
+    env["WINE_FULLSCREEN_FSR_STRENGTH"] = "2"
+    env["VKD3D_CONFIG"] = "dxr11,dxr"
+    env["VKD3D_FEATURE_LEVEL"] = "12_1"
     if not env.get("PULSE_SERVER"):
         for candidate in ("/run/user/1000/pulse/native", "/tmp/pulse-PKdhtXMmr18n/native"):
             if Path(candidate).exists():
@@ -356,9 +385,13 @@ def launch(app, wine):
         except (OSError, RuntimeError) as exc:
             print(f"DXVK setup failed: {exc}", file=sys.stderr)
             return 78
-        env["WINEDLLOVERRIDES"] = "d3d11,dxgi,d3d9,d3d10core=n,b;mscoree,mshtml=d"
+        try:
+            install_vkd3d(env["WINEPREFIX"])
+        except Exception as exc:
+            print(f"VKD3D setup notice: {exc}", file=sys.stderr)
+        env["WINEDLLOVERRIDES"] = "d3d12,d3d12core,d3d11,dxgi,d3d9,d3d10core=n,b;mscoree,mshtml=d"
         env["DXVK_HUD"] = "devinfo,fps"
-        backend = "NVIDIA Vulkan through DXVK"
+        backend = "NVIDIA Vulkan through DXVK & VKD3D (GPU 0)"
     elif selected == "direct_gl":
         backend = "NVIDIA OpenGL"
     elif selected == "virtualgl":

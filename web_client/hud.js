@@ -32,7 +32,7 @@
           <div class="seven-chip"><b data-stat="rtt">--</b><span>WebSocket RTT</span></div>
           <div class="seven-chip"><b data-stat="rate">--</b><span>Video rate</span></div>
           <div class="seven-chip"><b data-stat="pad">None</b><span>Gamepad</span></div>
-          <div class="seven-chip"><b data-stat="gpu">--</b><span>GPU load</span></div>
+          <div class="seven-chip"><b data-stat="gpu">--</b><span>GPU (G0|G1)</span></div>
           <div class="seven-chip"><b data-stat="cpu">--</b><span>CPU load</span></div>
         </div>
         <button class="seven-button seven-icon-button" data-action="expand" aria-label="Open controls" title="Open controls">⌄</button>
@@ -41,7 +41,8 @@
         <div class="seven-card">
           <div class="seven-card-title"><span>Live performance</span><span data-stat="transport">WebSocket</span></div>
           <div class="seven-metrics">
-            <div class="seven-metric"><strong data-stat="vram">--</strong><small>GPU VRAM</small></div>
+            <div class="seven-metric"><strong data-stat="gpu0_metric">--</strong><small>🎮 GPU 0 Render</small></div>
+            <div class="seven-metric"><strong data-stat="gpu1_metric">--</strong><small>📡 GPU 1 Stream</small></div>
             <div class="seven-metric"><strong data-stat="jitter">--</strong><small>RTT jitter</small></div>
             <div class="seven-metric"><strong data-stat="loss">--</strong><small>Frame loss</small></div>
             <div class="seven-metric"><strong data-stat="packet">N/A</strong><small>Packet loss</small></div>
@@ -122,24 +123,54 @@
     };
   }
 
+  let lastGpuCheck = 0;
+  async function syncGpus() {
+    const now = Date.now();
+    if (now - lastGpuCheck < 2000) return;
+    lastGpuCheck = now;
+    try {
+      const response = await fetch(`${controlBase()}/gpus`, { credentials: "same-origin" });
+      if (response.ok) {
+        const data = await response.json();
+        const gpus = data.gpus || [];
+        if (gpus.length >= 2) {
+          const g0 = gpus[0], g1 = gpus[1];
+          stat("gpu", `${g0.utilization}% | ${g1.utilization}%`);
+          stat("gpu0_metric", `${g0.utilization}% · ${(g0.memory_used / 1024).toFixed(1)} GB`);
+          stat("gpu1_metric", `${g1.utilization}% · ${(g1.memory_used / 1024).toFixed(1)} GB`);
+        } else if (gpus.length === 1) {
+          const g0 = gpus[0];
+          stat("gpu", `${g0.utilization}%`);
+          stat("gpu0_metric", `${g0.utilization}% · ${(g0.memory_used / 1024).toFixed(1)} GB`);
+          stat("gpu1_metric", "Inactive");
+        }
+      }
+    } catch (_) {}
+  }
+
   function render() {
     const sample = current();
     const latest = sample.latest;
     stat("fps", sample.fps ? `${format(sample.fps)} FPS` : "--");
     stat("rtt", sample.rtt ? `${format(sample.rtt)} ms` : "--");
     stat("rate", sample.rate ? `${format(sample.rate, 1)} Mbps` : "--");
-    stat("gpu", latest.gpu_percent !== undefined ? `${format(latest.gpu_percent)}%` : "--");
+    if (!lastGpuCheck) {
+      stat("gpu", latest.gpu_percent !== undefined ? `${format(latest.gpu_percent)}%` : "--");
+    }
     stat("cpu", latest.cpu_percent !== undefined ? `${format(latest.cpu_percent)}%` : "--");
     stat("jitter", state.rtts.length > 2 ? `${format(sample.jitter, 1)} ms` : "--");
     stat("loss", Number.isFinite(Number(sample.lost)) ? String(sample.lost) : "--");
     const used = value(latest.gpu_mem_used), total = value(latest.gpu_mem_total);
     const gib = 1024 ** 3;
-    stat("vram", total ? `${format(used / gib, 1)} / ${format(total / gib, 1)} GB` : "--");
+    if (!lastGpuCheck && total) {
+      stat("gpu0_metric", `${format(used / gib, 1)} / ${format(total / gib, 1)} GB`);
+    }
     const transport = sample.client.transport || "websockets";
     stat("transport", transport === "webrtc" ? "WebRTC" : "WebSocket");
     stat("packet", transport === "webrtc" && latest.packet_loss_percent !== undefined
       ? `${format(latest.packet_loss_percent, 2)}%` : "N/A (WS)");
     checkGamepads();
+    syncGpus();
     if (state.auto) maybeTune(sample);
   }
 

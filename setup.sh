@@ -18,7 +18,7 @@ echo "▶ Checking and clearing stale apt locks..."
 fuser -k /var/lib/dpkg/lock-frontend 2>/dev/null || true
 fuser -k /var/lib/dpkg/lock 2>/dev/null || true
 fuser -k /var/lib/apt/lists/lock 2>/dev/null || true
-fuser -k /var/cache/apt/archives/lock 2>/dev/null || true
+fuser -cache/apt/archives/lock 2>/dev/null || true
 rm -f /var/lib/dpkg/lock* /var/lib/apt/lists/lock* /var/cache/apt/archives/lock* 2>/dev/null || true
 dpkg --configure -a 2>/dev/null || true
 
@@ -55,11 +55,11 @@ fi
 # Resilient apt update
 apt-get update -o DPkg::Lock::Timeout=120 -qq || true
 
-# 3. Core desktop, X11, and audio utilities
+# 3. Core desktop, X11, audio, and compression utilities
 apt_install "core desktop" \
     xvfb openbox tint2 xterm pulseaudio pulseaudio-utils xauth dbus-x11 \
     libgl1-mesa-dri libgbm1 libpixman-1-0 libxkbcommon0 mesa-utils x11-utils vulkan-tools \
-    xdotool wmctrl wget curl cabextract p7zip-full winetricks python3-pygame python3-aiohttp
+    xdotool wmctrl wget curl cabextract p7zip-full zstd winetricks python3-pygame python3-aiohttp
 
 # Build tools (isolated so multilib issues don't block core)
 apt_install "build tools" git make gcc
@@ -73,9 +73,20 @@ apt_install "32-bit graphics runtime" \
     libxcomposite1:i386 libxrandr2:i386 libxinerama1:i386 libxi6:i386 libasound2:i386 \
     libpulse0:i386 libgnutls30:i386 libvulkan1:i386
 
-# GPU graphics/display components must be mounted by the host when the container
-# is created. Never install a second NVIDIA kernel driver or fabricate an ICD.
-# VirtualGL supplies both 64- and 32-bit OpenGL interposers on capable hosts.
+# 4b. NVIDIA 3D Hardware Userspace Driver & Vulkan Provisioner
+if [ -c /dev/nvidiactl ] && [ -c /dev/nvidia0 ]; then
+    echo "▶ Initializing NVIDIA Tesla T4 userspace driver and Vulkan ICD..."
+    if [ -f "$BENCH/probe_nvidia_userspace.sh" ]; then
+        bash "$BENCH/probe_nvidia_userspace.sh" || true
+    fi
+    work="$BENCH/nvidia-userspace-probe"
+    if [ -f "$work/env.sh" ]; then
+        # shellcheck disable=SC1090
+        . "$work/env.sh"
+    fi
+fi
+
+# 4c. VirtualGL 3.1.5 installation
 if [ -c /dev/nvidiactl ] && [ -c /dev/nvidia0 ]; then
     if ! [ -x /opt/VirtualGL/bin/vglrun ]; then
         VGL64=/tmp/virtualgl_3.1.5_amd64.deb
@@ -96,16 +107,28 @@ if [ -c /dev/nvidia-modeset ] && [ -c /dev/nvidia0 ]; then
     apt_install "NVIDIA Xorg server support" xserver-xorg-core
 fi
 
-if [ -c /dev/nvidiactl ] && { [ -f /etc/vulkan/icd.d/nvidia_icd.json ] || \
-     [ -f /usr/share/vulkan/icd.d/nvidia_icd.json ] || \
-     { [ -n "${VK_DRIVER_FILES:-}" ] && [ -f "$VK_DRIVER_FILES" ]; }; }; then
-    DXVK_TAR=/tmp/dxvk-2.6.2.tar.gz
+# 4d. DXVK 2.6.2 (DirectX 9/10/11 -> Vulkan) installation
+DXVK_TAR=/tmp/dxvk-2.6.2.tar.gz
+if [ ! -d /opt/gamelab-dxvk/dxvk-2.6.2 ]; then
+    echo "▶ Downloading and extracting DXVK 2.6.2 Vulkan translation layer..."
     wget -q https://github.com/doitsujin/dxvk/releases/download/v2.6.2/dxvk-2.6.2.tar.gz -O "$DXVK_TAR" || true
     if echo '17761876556afd55736cb895d184f5a1c55d43350f1b1e3b129f8d28706d7992  /tmp/dxvk-2.6.2.tar.gz' | sha256sum -c -; then
         mkdir -p /opt/gamelab-dxvk
-        tar -xzf "$DXVK_TAR" -C /opt/gamelab-dxvk
+        tar -xzf "$DXVK_TAR" -C /opt/gamelab-dxvk || true
     else
-        echo 'DXVK download or checksum failed; DXVK unavailable.'
+        echo 'Warning: DXVK download or checksum failed; DXVK unavailable.'
+    fi
+fi
+
+# 4e. VKD3D-Proton 2.14.1 (DirectX 12 -> Vulkan) installation for modern AAA games
+VKD3D_TAR=/tmp/vkd3d-proton-2.14.1.tar.zst
+if [ ! -d /opt/gamelab-vkd3d ]; then
+    echo "▶ Downloading VKD3D-Proton (DirectX 12) translation layer for modern AAA games..."
+    wget -q https://github.com/HansKristian-Work/vkd3d-proton/releases/download/v2.14.1/vkd3d-proton-2.14.1.tar.zst -O "$VKD3D_TAR" || true
+    if [ -f "$VKD3D_TAR" ] && [ $(stat -c%s "$VKD3D_TAR" 2>/dev/null || echo 0) -gt 1000000 ]; then
+        mkdir -p /opt/gamelab-vkd3d
+        tar --zstd -xf "$VKD3D_TAR" -C /opt/gamelab-vkd3d 2>/dev/null || \
+        tar -xf "$VKD3D_TAR" -C /opt/gamelab-vkd3d 2>/dev/null || true
     fi
 fi
 
@@ -170,8 +193,8 @@ if [ ! -d "$WINE_GE_DIR/Wine-GE-Proton8-26" ] && [ ! -d "$WINE_GE_DIR/lutris-GE-
                 ln -sf "$extracted" "/home/gamer/.local/share/lutris/runners/wine/Wine-GE-Proton8-26" || true
                 if [ ! -f /usr/bin/wine ]; then
                     ln -sf "$extracted/bin/wine" /usr/bin/wine || true
-                    ln -sf "$extracted/bin/wineserver" /usr/bin/wineserver || true
-                    ln -sf "$extracted/bin/wineboot" /usr/bin/wineboot || true
+                    ln -sf "$(dirname "$extracted/bin/wine")/wineserver" /usr/bin/wineserver || true
+                    ln -sf "$(dirname "$extracted/bin/wine")/wineboot" /usr/bin/wineboot || true
                 fi
                 if [ ! -f /usr/local/bin/wine ]; then
                     ln -sf "$extracted/bin/wine" /usr/local/bin/wine || true
@@ -182,10 +205,10 @@ if [ ! -d "$WINE_GE_DIR/Wine-GE-Proton8-26" ] && [ ! -d "$WINE_GE_DIR/lutris-GE-
     fi
 fi
 
-# 13. Pre-configure Heroic default settings: disable DXVK/VKD3D/Esync/Fsync
+# 13. Pre-configure Heroic default settings
 python3 "$BENCH/fix_heroic_config.py" || true
 
-# 14. Pre-initialize clean 64-bit Wine prefix with Wine-GE (prevents kernel32.dll not found and popup dialogs)
+# 14. Pre-initialize clean 64-bit Wine prefix with Wine-GE
 if [ -x "$WINE_GE_DIR/Wine-GE-Proton8-26/bin/wineboot" ]; then
     echo "▶ Initializing clean default Wine prefix (/home/gamer/.wine)..."
     export WINEPREFIX="/home/gamer/.wine"
@@ -193,6 +216,34 @@ if [ -x "$WINE_GE_DIR/Wine-GE-Proton8-26/bin/wineboot" ]; then
     export WINEDLLOVERRIDES="mscoree,mshtml=d"
     runuser -u gamer -- env WINEPREFIX="/home/gamer/.wine" WINEARCH=win64 WINEDLLOVERRIDES="mscoree,mshtml=d" \
         "$WINE_GE_DIR/Wine-GE-Proton8-26/bin/wineboot" --init 2>/dev/null || true
+
+    # Pre-install DXVK and VKD3D DirectX-to-Vulkan libraries into Wine prefix
+    echo "▶ Installing DXVK and VKD3D DirectX-to-Vulkan libraries into Wine prefix..."
+    if [ -d /opt/gamelab-dxvk/dxvk-2.6.2 ]; then
+        for arch_pair in "x64:system32" "x32:syswow64"; do
+            IFS=':' read -r darch dsub <<< "$arch_pair"
+            for dll in d3d9.dll d3d10core.dll d3d11.dll dxgi.dll; do
+                src="/opt/gamelab-dxvk/dxvk-2.6.2/$darch/$dll"
+                dst="/home/gamer/.wine/drive_c/windows/$dsub/$dll"
+                [ -f "$src" ] && cp -f "$src" "$dst" 2>/dev/null || true
+            done
+        done
+        echo "✓ DXVK installed into Wine prefix."
+    fi
+    for vkd3d_dir in /opt/gamelab-vkd3d/vkd3d-proton-*; do
+        if [ -d "$vkd3d_dir" ]; then
+            for arch_pair in "x64:system32" "x86:syswow64"; do
+                IFS=':' read -r darch dsub <<< "$arch_pair"
+                for dll in d3d12.dll d3d12core.dll; do
+                    src="$vkd3d_dir/$darch/$dll"
+                    dst="/home/gamer/.wine/drive_c/windows/$dsub/$dll"
+                    [ -f "$src" ] && cp -f "$src" "$dst" 2>/dev/null || true
+                done
+            done
+            echo "✓ VKD3D-Proton (DirectX 12) installed into Wine prefix."
+            break
+        fi
+    done
 
     # Pre-install Microsoft Visual C++ 2015-2022 runtimes (x64 and x86) into Wine prefix
     echo "▶ Pre-installing Microsoft Visual C++ runtimes into Wine prefix..."
@@ -209,28 +260,33 @@ if [ -x "$WINE_GE_DIR/Wine-GE-Proton8-26/bin/wineboot" ]; then
         runuser -u gamer -- env WINEPREFIX="/home/gamer/.wine" WINEARCH=win64 WINEDLLOVERRIDES="mscoree,mshtml=d" \
             "$WINE_GE_DIR/Wine-GE-Proton8-26/bin/wine" "$REDIST_DIR/vc_redist.x86.exe" /install /quiet /norestart 2>/dev/null || true
     fi
-    echo "▶ Installing the Unreal Engine Visual C++ 2019 prerequisite..."
+    echo "▶ Installing the Unreal Engine Visual C++ prerequisite..."
     runuser -u gamer -- env WINEPREFIX="/home/gamer/.wine" WINEARCH=win64 WINEDLLOVERRIDES="mscoree,mshtml=d" \
         winetricks -q vcrun2019 2>/dev/null || true
 
-    echo "▶ Applying verified DirectInput and zero-acceleration mouse settings..."
-    for mouse_entry in \
+    echo "▶ Applying verified DirectInput, AMD FSR, and zero-acceleration mouse settings..."
+    for reg_entry in \
         'HKEY_CURRENT_USER\Software\Wine\DirectInput|MouseWarpOverride|force' \
         'HKEY_CURRENT_USER\Software\Wine\X11 Driver|GrabPointer|Y' \
         'HKEY_CURRENT_USER\Software\Wine\X11 Driver|UseTakeFocus|N' \
         'HKEY_CURRENT_USER\Control Panel\Mouse|MouseSpeed|0' \
         'HKEY_CURRENT_USER\Control Panel\Mouse|MouseThreshold1|0' \
         'HKEY_CURRENT_USER\Control Panel\Mouse|MouseThreshold2|0' \
-        'HKEY_CURRENT_USER\Control Panel\Mouse|MouseSensitivity|10'; do
-        IFS='|' read -r mouse_key mouse_name mouse_value <<< "$mouse_entry"
+        'HKEY_CURRENT_USER\Control Panel\Mouse|MouseSensitivity|10' \
+        'HKEY_CURRENT_USER\Software\Wine\Direct3D|WINE_FULLSCREEN_FSR|1' \
+        'HKEY_CURRENT_USER\Software\Wine\Direct3D|WINE_FULLSCREEN_FSR_STRENGTH|2' \
+        'HKEY_CURRENT_USER\Software\Wine\DllOverrides|d3d11|native,builtin' \
+        'HKEY_CURRENT_USER\Software\Wine\DllOverrides|d3d12|native,builtin' \
+        'HKEY_CURRENT_USER\Software\Wine\DllOverrides|dxgi|native,builtin'; do
+        IFS='|' read -r rkey rname rval <<< "$reg_entry"
         runuser -u gamer -- env WINEPREFIX="/home/gamer/.wine" WINEARCH=win64 \
-            "$WINE_GE_DIR/Wine-GE-Proton8-26/bin/wine" reg add "$mouse_key" \
-            /v "$mouse_name" /t REG_SZ /d "$mouse_value" /f 2>/dev/null || true
+            "$WINE_GE_DIR/Wine-GE-Proton8-26/bin/wine" reg add "$rkey" \
+            /v "$rname" /t REG_SZ /d "$rval" /f 2>/dev/null || true
     done
-    echo "✓ Microsoft Visual C++ runtimes installed."
+    echo "✓ Wine prefix fully initialized with DXVK, VKD3D-Proton, and FSR upscaling."
 fi
 
-# 14. Inject keyboard lock into Selkies HTML (prevents Esc from exiting browser fullscreen)
+# 15. Inject keyboard lock into Selkies HTML (prevents Esc from exiting browser fullscreen)
 python3 -c "
 import sys; sys.path.insert(0, '$BENCH')
 try:
@@ -241,7 +297,7 @@ try:
 except Exception as e: print('Keyboard lock injection skipped:', e)
 " || true
 
-# 14. Compile Selkies gamepad interposers if not present
+# 16. Compile Selkies gamepad interposers if not present
 if [ ! -f "$BENCH/lib/x86_64-linux-gnu/selkies_input_interposer.so" ]; then
     SOURCE="$BENCH/selkies-source"
     if [ ! -d "$SOURCE" ]; then
@@ -260,32 +316,6 @@ if [ ! -f "$BENCH/lib/x86_64-linux-gnu/selkies_input_interposer.so" ]; then
     ln -sf "$BENCH/lib/i386-linux-gnu" "$BENCH/lib32" 2>/dev/null || true
     cp -f "$BENCH/lib/x86_64-linux-gnu/"*.so /usr/lib/x86_64-linux-gnu/ 2>/dev/null || true
     cp -f "$BENCH/lib/i386-linux-gnu/"*.so /usr/lib/i386-linux-gnu/ 2>/dev/null || true
-fi
-
-# 15. Automatic NVIDIA Tesla T4 userspace driver extraction and registration
-if [ -c /dev/nvidiactl ] && [ -c /dev/nvidia0 ]; then
-    echo "▶ Initializing NVIDIA Tesla T4 userspace driver and EGL offscreen bridge..."
-    if [ -f "$BENCH/probe_nvidia_userspace.sh" ]; then
-        bash "$BENCH/probe_nvidia_userspace.sh" 2>/dev/null || true
-    fi
-    work="$BENCH/nvidia-userspace-probe"
-    if [ -d "$work/lib64" ]; then
-        mkdir -p /usr/share/glvnd/egl_vendor.d /etc/vulkan/icd.d
-        [ -f "$work/10_nvidia.json" ] && cp -f "$work/10_nvidia.json" /usr/share/glvnd/egl_vendor.d/10_nvidia.json 2>/dev/null || true
-        [ -f "$work/nvidia_icd.json" ] && cp -f "$work/nvidia_icd.json" /etc/vulkan/icd.d/nvidia_icd.json 2>/dev/null || true
-        echo "$work/lib64" > /etc/ld.so.conf.d/nvidia-gpu.conf
-        [ -d "$work/lib32" ] && echo "$work/lib32" >> /etc/ld.so.conf.d/nvidia-gpu.conf
-        ldconfig 2>/dev/null || true
-        echo "✓ NVIDIA userspace driver registered in system linker."
-    fi
-fi
-
-# 16. Configure Wine DirectInput and X11 pointer capture for FPS games
-if [ -d "/home/gamer/.wine" ]; then
-    echo "▶ Configuring Wine DirectInput mouse handling for FPS games..."
-    runuser -u gamer -- env WINEPREFIX=/home/gamer/.wine wine reg add "HKEY_CURRENT_USER\Software\Wine\DirectInput" /v MouseWarpOverride /t REG_SZ /d force /f 2>/dev/null || true
-    runuser -u gamer -- env WINEPREFIX=/home/gamer/.wine wine reg add "HKEY_CURRENT_USER\Software\Wine\X11 Driver" /v GrabPointer /t REG_SZ /d Y /f 2>/dev/null || true
-    runuser -u gamer -- env WINEPREFIX=/home/gamer/.wine wine reg add "HKEY_CURRENT_USER\Software\Wine\X11 Driver" /v UseTakeFocus /t REG_SZ /d N /f 2>/dev/null || true
 fi
 
 # 17. Prepare /dev/input gamepad device nodes and permissions

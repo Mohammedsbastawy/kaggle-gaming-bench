@@ -267,6 +267,9 @@ def draw_header(width: int) -> None:
         if index == tab:
             pygame.draw.rect(screen, CYAN, (x, 52, surface.get_width(), 3), border_radius=2)
         x += surface.get_width() + 38
+    has_dual_gpu = Path("/dev/nvidia1").exists() and Path("/dev/nvidia0").exists()
+    gpu_badge = "DUAL GPU: G0 RENDER · G1 STREAM" if has_dual_gpu else "NVIDIA GPU ACCELERATED"
+    screen.blit(font_tiny.render(gpu_badge, True, VIOLET), (width - 380, 26))
     status = "GAME ACTIVE" if active is not None and active.poll() is None else "SYSTEM READY"
     color = CYAN if status == "GAME ACTIVE" else GREEN
     screen.blit(font_tiny.render(f"●  {status}", True, color), (width - 160, 26))

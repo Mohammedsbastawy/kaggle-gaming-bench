@@ -1,4 +1,10 @@
 #!/bin/bash
+# Asymmetric Dual-GPU Allocation:
+# Force all desktop session applications, game runners, and Wine to use GPU 0.
+export CUDA_VISIBLE_DEVICES=0
+export DRI_PRIME=0
+export VGL_DISPLAY=egl0
+
 export LD_PRELOAD='/tmp/kaggle-game-dev-bench/$LIB/selkies_input_interposer.so:/tmp/kaggle-game-dev-bench/$LIB/selkies_fake_udev.so'
 export SDL_AUDIODRIVER=pulse
 export SELKIES_JS_SOCKET_PATH="/tmp"

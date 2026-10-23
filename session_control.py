@@ -6,7 +6,7 @@ from pathlib import Path
 import signal
 import subprocess
 import time
-from typing import Any, Dict
+from typing import Any, Dict, List
 
 from aiohttp import web
 
@@ -16,6 +16,35 @@ from game_catalog import discover_games
 BENCH = Path("/tmp/kaggle-game-dev-bench")
 STATE = BENCH / "active-game.json"
 PORT = int(os.environ.get("SEVEN_BZ_CONTROL_PORT", "8766"))
+
+
+def get_gpu_metrics() -> List[Dict[str, Any]]:
+    """Query live metrics for all available NVIDIA GPUs."""
+    try:
+        res = subprocess.run(
+            ["nvidia-smi", "--query-gpu=index,name,utilization.gpu,memory.used,memory.total",
+             "--format=csv,noheader,nounits"],
+            stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True, timeout=2
+        )
+        if res.returncode != 0:
+            return []
+        gpus = []
+        for line in res.stdout.strip().splitlines():
+            parts = [p.strip() for p in line.split(",")]
+            if len(parts) >= 5:
+                idx = int(parts[0])
+                role = "Render (Game)" if idx == 0 else "Encode (Stream)"
+                gpus.append({
+                    "index": idx,
+                    "name": parts[1],
+                    "role": role,
+                    "utilization": int(parts[2]),
+                    "memory_used": int(parts[3]),
+                    "memory_total": int(parts[4]),
+                })
+        return gpus
+    except Exception:
+        return []
 
 
 def write_active_game(pid: int, pgid: int, title: str, source: str) -> None:
@@ -35,15 +64,17 @@ def clear_active_game(pid: int = 0) -> None:
 
 
 def _state() -> Dict[str, Any]:
+    state_data: Dict[str, Any] = {"running": False, "title": "No active game"}
     try:
         data = json.loads(STATE.read_text(encoding="utf-8"))
         pid = int(data.get("pid", 0))
         if pid > 1 and Path(f"/proc/{pid}").exists():
             data["running"] = True
-            return data
+            state_data = data
     except (OSError, ValueError, TypeError):
         pass
-    return {"running": False, "title": "No active game"}
+    state_data["gpus"] = get_gpu_metrics()
+    return state_data
 
 
 def _owned_process(pid: int) -> bool:
@@ -143,11 +174,16 @@ async def reset(request: web.Request) -> web.Response:
     return web.json_response(await reset_session())
 
 
+async def gpus_handler(_request: web.Request) -> web.Response:
+    return web.json_response({"gpus": get_gpu_metrics()})
+
+
 def main() -> None:
     """Serve narrow session actions on the loopback-only control port."""
     app = web.Application(client_max_size=16 * 1024)
     app.add_routes([web.get("/health", health), web.get("/status", status),
-                    web.get("/catalog", catalog), web.post("/reset", reset),
+                    web.get("/catalog", catalog), web.get("/gpus", gpus_handler),
+                    web.post("/reset", reset),
                     web.get("/input-mode", input_mode_get), web.post("/input-mode", input_mode_post)])
     web.run_app(app, host="127.0.0.1", port=PORT, access_log=None)
 

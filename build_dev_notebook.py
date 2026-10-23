@@ -393,6 +393,20 @@ if pidfile.exists():
 
 env = os.environ.copy()
 env['PATH'] = f"/usr/local/bin:/usr/games:/usr/bin:{env.get('PATH', '')}"
+
+# Asymmetric Dual-GPU Pipeline:
+# If two GPUs are detected (/dev/nvidia0 and /dev/nvidia1):
+# GPU 1 is dedicated exclusively to Selkies desktop capture & NVENC H.264 hardware encoding.
+# GPU 0 is dedicated exclusively to 3D game rendering (Vulkan/DXVK/VKD3D/VirtualGL).
+if Path('/dev/nvidia1').exists() and Path('/dev/nvidia0').exists():
+    print('▶ Dual-GPU environment detected: Dedicating GPU 1 to NVENC encoding and GPU 0 to 3D Game Rendering.', flush=True)
+    env['CUDA_VISIBLE_DEVICES'] = '1'
+    env['SELKIES_ENCODER_DEVICE'] = '1'
+else:
+    print('▶ Single-GPU environment detected: GPU 0 active for rendering and encoding.', flush=True)
+    env['CUDA_VISIBLE_DEVICES'] = '0'
+    env['SELKIES_ENCODER_DEVICE'] = '0'
+
 queue_size = os.environ.get('GAMELAB_WS_QUEUE', '12')
 if not queue_size.isdigit() or not 1 <= int(queue_size) <= 120:
     raise ValueError('GAMELAB_WS_QUEUE must be an integer from 1 to 120')
