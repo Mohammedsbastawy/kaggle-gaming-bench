@@ -436,6 +436,17 @@ env.update(SELKIES_ENABLE_HTTPS='false', SELKIES_MODE='websockets',
            FILE_MANAGER_PATH=str(BUILDS),
            SDL_AUDIODRIVER='pulse')
 
+# Enforce GLX extension on Xvfb in selkies package
+try:
+    import selkies
+    s_session = Path(selkies.__file__).parent / 'session.py'
+    if s_session.is_file():
+        s_code = s_session.read_text(encoding='utf-8')
+        s_code = s_code.replace('for extra in gpu + [glx, ["-extension", "GLX"]]:', 'for extra in [glx]:')
+        s_session.write_text(s_code, encoding='utf-8')
+except Exception:
+    pass
+
 log = (BENCH / 'selkies.log').open('a', buffering=1)
 server = subprocess.Popen(['selkies-session', '--session=' + str(wrapper),
                            '--port=8080', '--enable-basic-auth=false'],
