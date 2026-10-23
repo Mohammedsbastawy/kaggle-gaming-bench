@@ -157,6 +157,23 @@ if [ -x "$WINE_GE_DIR/Wine-GE-Proton8-26/bin/wineboot" ]; then
     export WINEDLLOVERRIDES="mscoree,mshtml=d"
     runuser -u gamer -- env WINEPREFIX="/home/gamer/.wine" WINEARCH=win64 WINEDLLOVERRIDES="mscoree,mshtml=d" \
         "$WINE_GE_DIR/Wine-GE-Proton8-26/bin/wineboot" --init 2>/dev/null || true
+
+    # Pre-install Microsoft Visual C++ 2015-2022 runtimes (x64 and x86) into Wine prefix
+    echo "▶ Pre-installing Microsoft Visual C++ runtimes into Wine prefix..."
+    REDIST_DIR="/tmp/vc_redist"
+    mkdir -p "$REDIST_DIR"
+    wget -q -c "https://aka.ms/vs/17/release/vc_redist.x64.exe" -O "$REDIST_DIR/vc_redist.x64.exe" || true
+    wget -q -c "https://aka.ms/vs/17/release/vc_redist.x86.exe" -O "$REDIST_DIR/vc_redist.x86.exe" || true
+
+    if [ -f "$REDIST_DIR/vc_redist.x64.exe" ]; then
+        runuser -u gamer -- env WINEPREFIX="/home/gamer/.wine" WINEARCH=win64 WINEDLLOVERRIDES="mscoree,mshtml=d" \
+            "$WINE_GE_DIR/Wine-GE-Proton8-26/bin/wine" "$REDIST_DIR/vc_redist.x64.exe" /install /quiet /norestart 2>/dev/null || true
+    fi
+    if [ -f "$REDIST_DIR/vc_redist.x86.exe" ]; then
+        runuser -u gamer -- env WINEPREFIX="/home/gamer/.wine" WINEARCH=win64 WINEDLLOVERRIDES="mscoree,mshtml=d" \
+            "$WINE_GE_DIR/Wine-GE-Proton8-26/bin/wine" "$REDIST_DIR/vc_redist.x86.exe" /install /quiet /norestart 2>/dev/null || true
+    fi
+    echo "✓ Microsoft Visual C++ runtimes installed."
 fi
 
 # 14. Inject keyboard lock into Selkies HTML (prevents Esc from exiting browser fullscreen)
