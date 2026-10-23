@@ -1,0 +1,14 @@
+__pycache__/
+*.pyc
+.ipynb_checkpoints/
+v4_results/
+v5_results/
+v6_results/
+v7_results/
+v8_results/
+last_run_log.txt
+live_stream_verified.png
+*.deb
+*.tar.xz
+*.exe
+selkies-source/
