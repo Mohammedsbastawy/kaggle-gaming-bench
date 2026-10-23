@@ -96,6 +96,47 @@ async def catalog(_request: web.Request) -> web.Response:
     return web.json_response({"games": discover_games()})
 
 
+INPUT_MODE_FILE = BENCH / "input-mode.json"
+
+
+def _get_input_mode() -> str:
+    try:
+        if INPUT_MODE_FILE.is_file():
+            data = json.loads(INPUT_MODE_FILE.read_text(encoding="utf-8"))
+            return data.get("mode", "mouse_keyboard")
+    except Exception:
+        pass
+    return "mouse_keyboard"
+
+
+def _set_input_mode(mode: str) -> str:
+    valid = "gamepad" if mode == "gamepad" else "mouse_keyboard"
+    try:
+        INPUT_MODE_FILE.write_text(json.dumps({"mode": valid, "updated": time.time()}), encoding="utf-8")
+    except Exception:
+        pass
+    return valid
+
+
+async def input_mode_get(_request: web.Request) -> web.Response:
+    return web.json_response({"mode": _get_input_mode()})
+
+
+async def input_mode_post(request: web.Request) -> web.Response:
+    if request.headers.get("X-7BZ-Action") != "hud":
+        raise web.HTTPForbidden(text="Missing HUD action header")
+    try:
+        body = await request.json()
+        target_mode = body.get("mode", "")
+    except Exception:
+        target_mode = ""
+    if not target_mode:
+        current = _get_input_mode()
+        target_mode = "gamepad" if current == "mouse_keyboard" else "mouse_keyboard"
+    new_mode = _set_input_mode(target_mode)
+    return web.json_response({"ok": True, "mode": new_mode, "message": f"Input mode set to {new_mode}"})
+
+
 async def reset(request: web.Request) -> web.Response:
     if request.headers.get("X-7BZ-Action") != "hud":
         raise web.HTTPForbidden(text="Missing HUD action header")
@@ -106,7 +147,8 @@ def main() -> None:
     """Serve narrow session actions on the loopback-only control port."""
     app = web.Application(client_max_size=16 * 1024)
     app.add_routes([web.get("/health", health), web.get("/status", status),
-                    web.get("/catalog", catalog), web.post("/reset", reset)])
+                    web.get("/catalog", catalog), web.post("/reset", reset),
+                    web.get("/input-mode", input_mode_get), web.post("/input-mode", input_mode_post)])
     web.run_app(app, host="127.0.0.1", port=PORT, access_log=None)
 
 

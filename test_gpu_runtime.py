@@ -66,10 +66,10 @@ class RuntimeTests(unittest.TestCase):
         with patch.object(gpu_runtime.subprocess, "run") as run:
             gpu_runtime.configure_mouse("wine", {"WINEPREFIX": "/prefix"})
         values = [entry.args[0][5] for entry in run.call_args_list]
-        self.assertEqual(values, ["MouseWarpOverride", "MouseSpeed", "MouseThreshold1",
-                                  "MouseThreshold2", "MouseSensitivity"])
+        self.assertEqual(values, ["MouseWarpOverride", "GrabPointer", "UseTakeFocus",
+                                  "MouseSpeed", "MouseThreshold1", "MouseThreshold2", "MouseSensitivity"])
         configured = [entry.args[0][9] for entry in run.call_args_list]
-        self.assertEqual(configured, ["disable", "0", "0", "0", "5"])
+        self.assertEqual(configured, ["force", "Y", "N", "0", "0", "0", "10"])
 
     def test_backend_requires_vulkan_window_before_dxvk(self):
         facts = dict(vulkan_window=False, vulkan_32bit_loader=True,

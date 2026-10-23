@@ -242,16 +242,30 @@ def unreal_shipping_binary(app):
     return matches[0] if matches else None
 
 
+def get_input_mode() -> str:
+    """Read the active input mode (mouse_keyboard or gamepad)."""
+    mode_file = Path("/tmp/kaggle-game-dev-bench/input-mode.json")
+    try:
+        if mode_file.is_file():
+            data = json.loads(mode_file.read_text(encoding="utf-8"))
+            return data.get("mode", "mouse_keyboard")
+    except Exception:
+        pass
+    return os.environ.get("SEVEN_BZ_INPUT_MODE", "mouse_keyboard")
+
+
 def configure_mouse(wine_bin, env):
-    """Apply the verified Wine DirectInput and zero-acceleration registry values."""
+    """Apply verified Wine DirectInput, X11 pointer capture, and raw sensitivity."""
     if not wine_bin:
         return
     values = (
-        ("HKEY_CURRENT_USER\\Software\\Wine\\DirectInput", "MouseWarpOverride", "disable"),
+        ("HKEY_CURRENT_USER\\Software\\Wine\\DirectInput", "MouseWarpOverride", "force"),
+        ("HKEY_CURRENT_USER\\Software\\Wine\\X11 Driver", "GrabPointer", "Y"),
+        ("HKEY_CURRENT_USER\\Software\\Wine\\X11 Driver", "UseTakeFocus", "N"),
         ("HKEY_CURRENT_USER\\Control Panel\\Mouse", "MouseSpeed", "0"),
         ("HKEY_CURRENT_USER\\Control Panel\\Mouse", "MouseThreshold1", "0"),
         ("HKEY_CURRENT_USER\\Control Panel\\Mouse", "MouseThreshold2", "0"),
-        ("HKEY_CURRENT_USER\\Control Panel\\Mouse", "MouseSensitivity", "5"),
+        ("HKEY_CURRENT_USER\\Control Panel\\Mouse", "MouseSensitivity", "10"),
     )
     for key, name, value in values:
         try:
@@ -308,9 +322,23 @@ def launch(app, wine):
     wine_bin = wine or shutil.which("wine")
     configure_mouse(wine_bin, env)
 
-    # Preserve the controller interposer for the game, not for probes.
-    if os.environ.get("LD_PRELOAD"):
-        env["LD_PRELOAD"] = os.environ["LD_PRELOAD"]
+    input_mode = get_input_mode()
+    print(f"Active input mode: {input_mode}", flush=True)
+    if input_mode == "mouse_keyboard":
+        # Pure Mouse & Keyboard: Remove interposer and disable Wine virtual joystick
+        # to prevent ghost controller conflict (locks Pitch / Yaw fighting).
+        env.pop("LD_PRELOAD", None)
+        env["SDL_JOYSTICK_DISABLE_UDEV"] = "1"
+        env["SDL_JOYSTICK_DEVICE"] = ""
+        env["WINEDLLOVERRIDES"] = env.get("WINEDLLOVERRIDES", "") + ";winebus.sys=d"
+    else:
+        # Gamepad Mode: Bind Xbox 360 controller sockets via interposers
+        env["SELKIES_JS_SOCKET_PATH"] = "/tmp"
+        env["SDL_JOYSTICK_DISABLE_UDEV"] = "1"
+        env["SDL_JOYSTICK_DEVICE"] = "/dev/input/event1000:/dev/input/event1001:/dev/input/event1002:/dev/input/event1003"
+        interposer = "/tmp/kaggle-game-dev-bench/$LIB/selkies_input_interposer.so:/tmp/kaggle-game-dev-bench/$LIB/selkies_fake_udev.so"
+        env["LD_PRELOAD"] = os.environ.get("LD_PRELOAD", interposer)
+
     shipping = unreal_shipping_binary(app)
     launch_cwd = str(shipping.parent) if shipping else None
     command = [wine_bin, str(shipping)] if shipping and wine_bin else ["legendary", "launch", app, "--wine", wine]

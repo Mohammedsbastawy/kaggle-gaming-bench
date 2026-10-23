@@ -177,7 +177,7 @@ export DISPLAY="${{DISPLAY:-:0}}"
 export PATH="/usr/games:/usr/local/bin:/usr/bin:$PATH"
 export SDL_AUDIODRIVER=pulse
 export LD_PRELOAD='/tmp/kaggle-game-dev-bench/$LIB/selkies_input_interposer.so:/tmp/kaggle-game-dev-bench/$LIB/selkies_fake_udev.so'
-export SELKIES_JS_SOCKET_PATH="$XDG_RUNTIME_DIR"
+export SELKIES_JS_SOCKET_PATH="/tmp"
 export SDL_JOYSTICK_DISABLE_UDEV=1
 export SDL_JOYSTICK_DEVICE=/dev/input/event1000:/dev/input/event1001:/dev/input/event1002:/dev/input/event1003
 
@@ -407,6 +407,7 @@ env.update(SELKIES_ENABLE_HTTPS='false', SELKIES_MODE='websockets',
            SELKIES_AUDIO_ENABLED='true', SELKIES_AUDIO_CHANNELS='2',
            SELKIES_AUDIO_BITRATE='128000', SELKIES_GAMEPAD_ENABLED='true',
            SELKIES_UINPUT_GAMEPAD='false',
+           SELKIES_JS_SOCKET_PATH='/tmp',
            SELKIES_UI_TITLE='7BZ Dev Cloud Game',
            SELKIES_UI_SHOW_SIDEBAR='true', SELKIES_UI_SHOW_LOGO='false',
            SELKIES_MANUAL_WIDTH='1280', SELKIES_MANUAL_HEIGHT='720',
@@ -442,6 +443,9 @@ with urllib.request.urlopen('http://127.0.0.1:8080/api/status', timeout=5) as re
     status = json.load(response)
 
 time.sleep(2)
+for sock in Path('/tmp').glob('selkies_*.sock'):
+    try: sock.chmod(0o666)
+    except Exception: pass
 serverlog = (BENCH / 'selkies.log').read_text(errors='replace')
 
 # =========================================================================

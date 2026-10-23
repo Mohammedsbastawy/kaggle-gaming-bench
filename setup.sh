@@ -215,11 +215,13 @@ if [ -x "$WINE_GE_DIR/Wine-GE-Proton8-26/bin/wineboot" ]; then
 
     echo "▶ Applying verified DirectInput and zero-acceleration mouse settings..."
     for mouse_entry in \
-        'HKEY_CURRENT_USER\Software\Wine\DirectInput|MouseWarpOverride|disable' \
+        'HKEY_CURRENT_USER\Software\Wine\DirectInput|MouseWarpOverride|force' \
+        'HKEY_CURRENT_USER\Software\Wine\X11 Driver|GrabPointer|Y' \
+        'HKEY_CURRENT_USER\Software\Wine\X11 Driver|UseTakeFocus|N' \
         'HKEY_CURRENT_USER\Control Panel\Mouse|MouseSpeed|0' \
         'HKEY_CURRENT_USER\Control Panel\Mouse|MouseThreshold1|0' \
         'HKEY_CURRENT_USER\Control Panel\Mouse|MouseThreshold2|0' \
-        'HKEY_CURRENT_USER\Control Panel\Mouse|MouseSensitivity|5'; do
+        'HKEY_CURRENT_USER\Control Panel\Mouse|MouseSensitivity|10'; do
         IFS='|' read -r mouse_key mouse_name mouse_value <<< "$mouse_entry"
         runuser -u gamer -- env WINEPREFIX="/home/gamer/.wine" WINEARCH=win64 \
             "$WINE_GE_DIR/Wine-GE-Proton8-26/bin/wine" reg add "$mouse_key" \
@@ -274,13 +276,21 @@ if [ -c /dev/nvidiactl ] && [ -c /dev/nvidia0 ]; then
     fi
 fi
 
-# 16. Configure Wine DirectInput mouse warping for FPS games
+# 16. Configure Wine DirectInput and X11 pointer capture for FPS games
 if [ -d "/home/gamer/.wine" ]; then
     echo "▶ Configuring Wine DirectInput mouse handling for FPS games..."
-    runuser -u gamer -- env WINEPREFIX=/home/gamer/.wine wine reg add "HKEY_CURRENT_USER\Software\Wine\DirectInput" /v MouseWarpOverride /t REG_SZ /d disable /f 2>/dev/null || true
+    runuser -u gamer -- env WINEPREFIX=/home/gamer/.wine wine reg add "HKEY_CURRENT_USER\Software\Wine\DirectInput" /v MouseWarpOverride /t REG_SZ /d force /f 2>/dev/null || true
+    runuser -u gamer -- env WINEPREFIX=/home/gamer/.wine wine reg add "HKEY_CURRENT_USER\Software\Wine\X11 Driver" /v GrabPointer /t REG_SZ /d Y /f 2>/dev/null || true
+    runuser -u gamer -- env WINEPREFIX=/home/gamer/.wine wine reg add "HKEY_CURRENT_USER\Software\Wine\X11 Driver" /v UseTakeFocus /t REG_SZ /d N /f 2>/dev/null || true
 fi
 
-# 17. Set permissions and ownership
+# 17. Prepare /dev/input gamepad device nodes and permissions
+mkdir -p /dev/input 2>/dev/null || true
+for i in 0 1 2 3; do touch /dev/input/js$i 2>/dev/null || true; done
+for i in 1000 1001 1002 1003; do touch /dev/input/event$i 2>/dev/null || true; done
+chmod -R 666 /dev/input 2>/dev/null || true
+
+# 18. Set permissions and ownership
 chmod -R 755 "$BENCH"/*.sh 2>/dev/null || true
 chmod -R 777 "$BENCH" 2>/dev/null || true
 chown -R gamer:gamer /home/gamer 2>/dev/null || true

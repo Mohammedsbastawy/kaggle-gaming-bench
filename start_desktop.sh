@@ -1,11 +1,23 @@
 #!/bin/bash
 export LD_PRELOAD='/tmp/kaggle-game-dev-bench/$LIB/selkies_input_interposer.so:/tmp/kaggle-game-dev-bench/$LIB/selkies_fake_udev.so'
 export SDL_AUDIODRIVER=pulse
-export SELKIES_JS_SOCKET_PATH="$XDG_RUNTIME_DIR"
+export SELKIES_JS_SOCKET_PATH="/tmp"
 export SDL_JOYSTICK_DISABLE_UDEV=1
 export SDL_JOYSTICK_DEVICE=/dev/input/event1000:/dev/input/event1001:/dev/input/event1002:/dev/input/event1003
 export DISPLAY="${DISPLAY:-:0}"
 export PATH="/usr/games:/usr/local/bin:/usr/bin:$PATH"
+
+# Ensure /dev/input nodes and permissions exist
+mkdir -p /dev/input 2>/dev/null || true
+for i in 0 1 2 3; do touch /dev/input/js$i 2>/dev/null || true; done
+for i in 1000 1001 1002 1003; do touch /dev/input/event$i 2>/dev/null || true; done
+chmod -R 666 /dev/input 2>/dev/null || true
+
+# Continuous socket permission monitor so unprivileged gamer user can connect to gamepad sockets
+(while true; do
+    chmod 666 /tmp/selkies_*.sock 2>/dev/null || true
+    sleep 2
+done) &
 
 # Load NVIDIA userspace driver environment if available
 probe_env=/tmp/kaggle-game-dev-bench/nvidia-userspace-probe/env.sh

@@ -10,6 +10,7 @@
   const state = {
     expanded: false, auto: false, level: 2, lastLost: 0, lastTune: 0,
     rtts: [], audio: true, pointer: false, esc: false, toastTimer: 0,
+    hasGamepad: false, inputMode: "mouse_keyboard",
   };
   const levels = [
     { bitrate: 2000, width: 854, height: 480, fps: 30, name: "Recovery" },
@@ -30,6 +31,7 @@
           <div class="seven-chip"><b data-stat="fps">--</b><span>Stream FPS</span></div>
           <div class="seven-chip"><b data-stat="rtt">--</b><span>WebSocket RTT</span></div>
           <div class="seven-chip"><b data-stat="rate">--</b><span>Video rate</span></div>
+          <div class="seven-chip"><b data-stat="pad">None</b><span>Gamepad</span></div>
           <div class="seven-chip"><b data-stat="gpu">--</b><span>GPU load</span></div>
           <div class="seven-chip"><b data-stat="cpu">--</b><span>CPU load</span></div>
         </div>
@@ -52,13 +54,14 @@
           </div>
           <div class="seven-actions">
             <button class="seven-button" data-action="fullscreen">Fullscreen</button>
-            <button class="seven-button" data-action="pointer">Pointer Lock</button>
+            <button class="seven-button" data-action="pointer">Gaming Mode (Lock Mouse)</button>
+            <button class="seven-button" data-action="mode" data-stat="modename">🖱️ Mode: M+K</button>
             <button class="seven-button" data-action="esc">Esc Lock</button>
             <button class="seven-button" data-action="audio">Audio Unmute</button>
             <button class="seven-button seven-danger" data-action="reset">Force Kill / Exit Frozen Game</button>
           </div>
         </div>
-        <div class="seven-notice"><span>Keyboard tip: set your local PC keyboard layout to English (EN) before playing so WASD uses Latin key mappings.</span><span>Ctrl+Shift+M: HUD</span></div>
+        <div class="seven-notice"><span>Input tip: In FPS games (Blood West), use Gaming Mode for unconstrained 360° mouse view. If using Gamepad, press any button on the controller to connect.</span><span>Ctrl+Shift+M: HUD</span></div>
       </div>
     </div>
     <div class="seven-toast" role="status"></div>`;
@@ -78,6 +81,25 @@
   function controlBase() {
     const replaced = window.location.pathname.replace(/\/proxy\/8080(?:\/.*)?$/, "/proxy/8766");
     return replaced === window.location.pathname ? "/proxy/8766" : replaced;
+  }
+
+  function checkGamepads() {
+    try {
+      const pads = navigator.getGamepads ? Array.from(navigator.getGamepads()).filter(Boolean) : [];
+      if (pads.length > 0) {
+        const p = pads[0];
+        const name = p.id ? p.id.split("(")[0].trim() : "Controller";
+        stat("pad", name.slice(0, 11) || "Connected");
+        if (!state.hasGamepad) {
+          state.hasGamepad = true;
+          toast(`🎮 Controller Connected: ${name.slice(0, 25)}`);
+          post({ type: "gamepadControl", enabled: true });
+        }
+      } else {
+        stat("pad", "None");
+        state.hasGamepad = false;
+      }
+    } catch (_) {}
   }
 
   function current() {
@@ -117,6 +139,7 @@
     stat("transport", transport === "webrtc" ? "WebRTC" : "WebSocket");
     stat("packet", transport === "webrtc" && latest.packet_loss_percent !== undefined
       ? `${format(latest.packet_loss_percent, 2)}%` : "N/A (WS)");
+    checkGamepads();
     if (state.auto) maybeTune(sample);
   }
 
@@ -151,9 +174,70 @@
       document.exitPointerLock();
       return;
     }
-    const target = document.querySelector("canvas") || document.querySelector("video") || document.documentElement;
-    try { await target.requestPointerLock({ unadjustedMovement: true }); }
-    catch (_error) { try { await target.requestPointerLock(); } catch (error) { toast(`Pointer lock unavailable: ${error.message}`); } }
+    // Activate Selkies Gaming Mode for raw relative hardware deltas
+    post({ type: "requestGamingMode" });
+    if (window.webrtcInput && typeof window.webrtcInput.enterGamingMode === "function") {
+      try { window.webrtcInput.enterGamingMode(); } catch (_) {}
+    }
+    const target = document.getElementById("videoCanvas") || document.getElementById("stream") || document.querySelector("canvas") || document.documentElement;
+    try {
+      await target.requestPointerLock({ unadjustedMovement: true });
+      toast("Gaming Mode: 360° mouse look enabled. Press Esc to exit.");
+    } catch (_error) {
+      try {
+        await target.requestPointerLock();
+        toast("Gaming Mode enabled. Press Esc to exit.");
+      } catch (error) {
+        toast(`Pointer lock unavailable: ${error.message}`);
+      }
+    }
+  }
+
+  async function toggleInputMode() {
+    const btn = button("mode");
+    if (!btn) return;
+    btn.disabled = true;
+    try {
+      const response = await fetch(`${controlBase()}/input-mode`, {
+        method: "POST",
+        credentials: "same-origin",
+        headers: { "X-7BZ-Action": "hud", "Content-Type": "application/json" },
+        body: JSON.stringify({})
+      });
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      const result = await response.json();
+      state.inputMode = result.mode;
+      updateInputModeUI();
+      toast(result.mode === "mouse_keyboard"
+        ? "Switched to 🖱️ Mouse & Keyboard Mode (Zero gamepad interference)"
+        : "Switched to 🎮 Gamepad Mode (Xbox 360 Controller)");
+    } catch (error) {
+      toast(`Input mode switch failed: ${error.message}`);
+    } finally {
+      btn.disabled = false;
+    }
+  }
+
+  function updateInputModeUI() {
+    const isKbm = state.inputMode === "mouse_keyboard";
+    const label = isKbm ? "🖱️ Mode: M+K" : "🎮 Mode: Gamepad";
+    stat("modename", label);
+    const btn = button("mode");
+    if (btn) {
+      btn.textContent = label;
+      btn.classList.toggle("is-active", !isKbm);
+    }
+  }
+
+  async function syncInputMode() {
+    try {
+      const response = await fetch(`${controlBase()}/input-mode`, { credentials: "same-origin" });
+      if (response.ok) {
+        const data = await response.json();
+        state.inputMode = data.mode || "mouse_keyboard";
+        updateInputModeUI();
+      }
+    } catch (_) {}
   }
 
   async function toggleEsc() {
@@ -187,6 +271,7 @@
     if (action === "expand") toggleExpanded();
     if (action === "fullscreen") post({ type: "requestFullscreen" });
     if (action === "pointer") togglePointer();
+    if (action === "mode") toggleInputMode();
     if (action === "esc") toggleEsc();
     if (action === "audio") {
       state.audio = true;
@@ -217,7 +302,21 @@
       toggleExpanded();
     }
   }, true);
+
+  window.addEventListener("gamepadconnected", (event) => {
+    state.hasGamepad = true;
+    toast(`🎮 Gamepad Connected: ${event.gamepad.id.slice(0, 30)}`);
+    post({ type: "gamepadControl", enabled: true });
+    checkGamepads();
+  });
+  window.addEventListener("gamepaddisconnected", () => {
+    state.hasGamepad = false;
+    toast("Gamepad disconnected");
+    checkGamepads();
+  });
+
   post({ type: "statsOpen", open: true });
+  syncInputMode();
   setInterval(render, 1000);
   setTimeout(render, 700);
 })();

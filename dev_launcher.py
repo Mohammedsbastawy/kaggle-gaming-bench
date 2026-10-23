@@ -55,6 +55,29 @@ def pulse_server() -> str:
     return ""
 
 
+INPUT_MODE_FILE = BENCH / "input-mode.json"
+
+
+def get_launcher_input_mode() -> str:
+    try:
+        if INPUT_MODE_FILE.is_file():
+            data = json.loads(INPUT_MODE_FILE.read_text(encoding="utf-8"))
+            return data.get("mode", "mouse_keyboard")
+    except Exception:
+        pass
+    return "mouse_keyboard"
+
+
+def toggle_launcher_input_mode() -> str:
+    curr = get_launcher_input_mode()
+    new_m = "gamepad" if curr == "mouse_keyboard" else "mouse_keyboard"
+    try:
+        INPUT_MODE_FILE.write_text(json.dumps({"mode": new_m, "updated": time.time()}), encoding="utf-8")
+    except Exception:
+        pass
+    return new_m
+
+
 def game_env() -> Dict[str, str]:
     """Build the common X11, controller, and PulseAudio environment."""
     env = os.environ.copy()
@@ -62,6 +85,18 @@ def game_env() -> Dict[str, str]:
     server = pulse_server()
     if server:
         env["PULSE_SERVER"] = server
+    mode = get_launcher_input_mode()
+    if mode == "mouse_keyboard":
+        env.pop("LD_PRELOAD", None)
+        env["SDL_JOYSTICK_DEVICE"] = ""
+        env["SDL_JOYSTICK_DISABLE_UDEV"] = "1"
+        env["WINEDLLOVERRIDES"] = env.get("WINEDLLOVERRIDES", "") + ";winebus.sys=d"
+    else:
+        env["SELKIES_JS_SOCKET_PATH"] = "/tmp"
+        env["SDL_JOYSTICK_DISABLE_UDEV"] = "1"
+        env["SDL_JOYSTICK_DEVICE"] = "/dev/input/event1000:/dev/input/event1001:/dev/input/event1002:/dev/input/event1003"
+        interposer = "/tmp/kaggle-game-dev-bench/$LIB/selkies_input_interposer.so:/tmp/kaggle-game-dev-bench/$LIB/selkies_fake_udev.so"
+        env["LD_PRELOAD"] = os.environ.get("LD_PRELOAD", interposer)
     return env
 
 
@@ -277,8 +312,10 @@ def draw_cards(items: List[Dict[str, Any]], width: int, chosen: int) -> List[Tup
 
 def draw_footer(width: int, height: int) -> None:
     pygame.draw.rect(screen, (10, 15, 29), (0, height - 42, width, 42))
-    screen.blit(font_small.render(clipped(message, font_small, width - 520), True, MUTED), (28, height - 28))
-    hint = "D-Pad / Stick  Move     A  Play     B  Stop / Back     LB/RB  Tabs"
+    mode_text = "🖱️ Mouse & Keyboard" if get_launcher_input_mode() == "mouse_keyboard" else "🎮 Gamepad (Xbox 360)"
+    mode_label = f"[{mode_text}] (M/I to switch)"
+    screen.blit(font_small.render(clipped(f"{mode_label}  ·  {message}", font_small, width - 520), True, CYAN), (28, height - 28))
+    hint = "D-Pad Move   A Play   B Stop   M/Select Mode   LB/RB Tabs"
     screen.blit(font_small.render(hint, True, (195, 205, 227)), (width - font_small.size(hint)[0] - 28, height - 28))
 
 
@@ -305,6 +342,9 @@ while running:
             elif event.key in (pygame.K_DOWN, pygame.K_s): selected = min(len(items) - 1, selected + 4)
             elif event.key in (pygame.K_RETURN, pygame.K_SPACE) and items: message = launch(current)
             elif event.key in (pygame.K_BACKSPACE, pygame.K_DELETE, pygame.K_ESCAPE): message = stop_active()
+            elif event.key in (pygame.K_m, pygame.K_i):
+                new_m = toggle_launcher_input_mode()
+                message = f"Input Mode: {'🖱️ Mouse & Keyboard' if new_m == 'mouse_keyboard' else '🎮 Controller (Xbox 360)'}"
             elif event.key == pygame.K_TAB:
                 tab = (tab + (-1 if pygame.key.get_mods() & pygame.KMOD_SHIFT else 1)) % len(TABS); selected = 0
         elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
@@ -329,6 +369,9 @@ while running:
         elif event.type == pygame.JOYBUTTONDOWN:
             if event.button == 0 and items: message = launch(current)
             elif event.button == 1: message = stop_active()
+            elif event.button in (3, 8):
+                new_m = toggle_launcher_input_mode()
+                message = f"Input Mode: {'🖱️ Mouse & Keyboard' if new_m == 'mouse_keyboard' else '🎮 Controller (Xbox 360)'}"
             elif event.button in (4, 9): tab = (tab - 1) % len(TABS); selected = 0
             elif event.button in (5, 10): tab = (tab + 1) % len(TABS); selected = 0
             elif event.button in (11, 12): selected = max(0, selected - 4)
