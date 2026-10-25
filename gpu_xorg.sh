@@ -15,6 +15,10 @@ if [ ! -c /dev/nvidiactl ] || [ ! -c /dev/nvidia0 ] || [ ! -c /dev/nvidia-modese
     exit 0
 fi
 mkdir -p /usr/lib/xorg/modules/drivers /usr/lib/xorg/modules/extensions 2>/dev/null || true
+if [ -d /usr/local/nvidia/lib64/xorg/modules ]; then
+    cp -fL /usr/local/nvidia/lib64/xorg/modules/drivers/nvidia_drv.so /usr/lib/xorg/modules/drivers/ 2>/dev/null || true
+    cp -fL /usr/local/nvidia/lib64/xorg/modules/extensions/libglxserver_nvidia.so* /usr/lib/xorg/modules/extensions/ 2>/dev/null || true
+fi
 for drv in $(find /usr/local/nvidia /usr/lib -name nvidia_drv.so 2>/dev/null); do
     if [ -f "$drv" ] && [ ! -f /usr/lib/xorg/modules/drivers/nvidia_drv.so ]; then
         cp -a "$drv" /usr/lib/xorg/modules/drivers/ 2>/dev/null || true
@@ -65,7 +69,7 @@ Section "Device"
     Driver "nvidia"
     BusID "$bus_id"
     Option "AllowEmptyInitialConfiguration" "true"
-    Option "UseDisplayDevice" "none"
+    Option "ConnectedMonitor" "DFP-0"
 EndSection
 Section "Screen"
     Identifier "Screen0"
@@ -73,7 +77,7 @@ Section "Screen"
     DefaultDepth 24
     SubSection "Display"
         Depth 24
-        Virtual 1280 720
+        Modes "1280x720"
     EndSubSection
 EndSection
 EOF
