@@ -66,6 +66,43 @@ class IdTech5LaunchTests(unittest.TestCase):
         self.assertEqual(probe.call_count, 3)
         self.assertEqual(call.call_args.args[0][1:3], ["-d", "egl0"])
 
+    def test_direct_xorg_mouse_mode_does_not_expose_virtual_gamepads(self):
+        info = "OpenGL vendor string: NVIDIA Corporation\n"
+        argv = ["launch_idtech5.py", "--direct-xorg", "--wine", "/wine/bin/wine",
+                "/games/WolfNewOrder_x64.exe"]
+        with patch.object(sys, "argv", argv), \
+             patch.object(Path, "is_file", return_value=True), \
+             patch.object(launch_idtech5, "probe", return_value=(0, info)), \
+             patch.object(launch_idtech5, "get_input_mode", return_value="mouse_keyboard"), \
+             patch.object(launch_idtech5, "configure_mouse") as configure_mouse, \
+             patch.object(launch_idtech5.subprocess, "call", return_value=0) as call, \
+             patch.dict(os.environ, {"LD_PRELOAD": "/virtual-pad.so", "DISPLAY": ":1"}):
+            self.assertEqual(launch_idtech5.main(), 0)
+        env = call.call_args.kwargs["env"]
+        self.assertNotIn("LD_PRELOAD", env)
+        self.assertNotIn("SELKIES_JS_SOCKET_PATH", env)
+        self.assertEqual(env["SDL_JOYSTICK_DEVICE"], "")
+        self.assertIn("winebus.sys=d", env["WINEDLLOVERRIDES"])
+        configure_mouse.assert_called_once()
+
+    def test_direct_xorg_gamepad_mode_keeps_controller_interposer(self):
+        info = "OpenGL vendor string: NVIDIA Corporation\n"
+        argv = ["launch_idtech5.py", "--direct-xorg", "--wine", "/wine/bin/wine",
+                "/games/WolfNewOrder_x64.exe"]
+        with patch.object(sys, "argv", argv), \
+             patch.object(Path, "is_file", return_value=True), \
+             patch.object(Path, "is_dir", return_value=True), \
+             patch.object(launch_idtech5, "probe", return_value=(0, info)), \
+             patch.object(launch_idtech5, "get_input_mode", return_value="gamepad"), \
+             patch.object(launch_idtech5, "configure_mouse"), \
+             patch.object(launch_idtech5.subprocess, "call", return_value=0) as call, \
+             patch.dict(os.environ, {"DISPLAY": ":1"}, clear=True):
+            self.assertEqual(launch_idtech5.main(), 0)
+        env = call.call_args.kwargs["env"]
+        self.assertIn("selkies_input_interposer.so", env["LD_PRELOAD"])
+        self.assertIn("direct-stream-sockets", env["SELKIES_JS_SOCKET_PATH"])
+        self.assertNotIn("winebus.sys=d", env["WINEDLLOVERRIDES"])
+
 
 if __name__ == "__main__":
     unittest.main()

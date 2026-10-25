@@ -44,6 +44,10 @@ VSCode Compatible URL to build the authenticated proxy URL; no shell commands
 are needed. The direct stream serves the full 7BZ top HUD, and Wolfenstein
 opens borderless across 1280×720.
 
+For continuous FPS mouse look, open the stream in a Chrome or Edge tab and
+enable Gaming Mode. The Codex in-app browser rejected fullscreen and pointer
+lock during the live check. See [mouse input diagnosis](MOUSE_INPUT.md).
+
 ---
 
 ## Storefront Integration & WineD3D

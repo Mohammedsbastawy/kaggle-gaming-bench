@@ -773,6 +773,7 @@ html = r"""
       <li>In Kaggle, open <b>Run → Kaggle Jupyter Server</b> and copy the <b>VSCode Compatible URL</b>.</li>
       <li>Paste it into the field below and click <b>Connect to Stream</b>.</li>
       <li>Open the 7BZ HUD and select <b>Audio Unmute</b> for Opus stereo audio.</li>
+      <li>For FPS mouse look, use a normal Chrome or Edge tab and enable <b>Gaming Mode</b>; embedded viewers may block pointer lock.</li>
       <li>Set your local keyboard layout to English (EN), then use mouse, keyboard, or gamepad navigation.</li>
     </ol>
   </div>

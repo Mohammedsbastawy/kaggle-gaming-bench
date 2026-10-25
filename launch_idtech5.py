@@ -12,6 +12,8 @@ import re
 import subprocess
 import sys
 
+from gpu_runtime import configure_mouse, get_input_mode
+
 
 VGL = Path("/opt/VirtualGL/bin/vglrun")
 
@@ -66,12 +68,21 @@ def main():
         env.pop("VGL_DISPLAY", None)
         for key in ("VGL_SYNC", "VGL_READBACK", "VGL_LOGO", "VGL_PROFILE"):
             env.pop(key, None)
-        socket_dir = Path("/tmp/kaggle-game-dev-bench/direct-stream-sockets")
-        input_hook = Path("/tmp/kaggle-game-dev-bench/lib64/selkies_input_interposer.so")
-        if socket_dir.is_dir() and input_hook.is_file():
-            env["SELKIES_JS_SOCKET_PATH"] = str(socket_dir)
-            env["LD_PRELOAD"] = (str(input_hook) + ":" + env.get("LD_PRELOAD", "")).rstrip(":")
-            env["SDL_JOYSTICK_DISABLE_UDEV"] = "1"
+        input_mode = get_input_mode()
+        env["SDL_JOYSTICK_DISABLE_UDEV"] = "1"
+        if input_mode == "mouse_keyboard":
+            # Xorg receives Selkies mouse motion through XTEST/XI2. Keep
+            # virtual Xbox devices out of Wine's mouse-only game session.
+            env.pop("LD_PRELOAD", None)
+            env.pop("SELKIES_JS_SOCKET_PATH", None)
+            env["SDL_JOYSTICK_DEVICE"] = ""
+            env["WINEDLLOVERRIDES"] += ";winebus.sys=d"
+        else:
+            socket_dir = Path("/tmp/kaggle-game-dev-bench/direct-stream-sockets")
+            input_hook = Path("/tmp/kaggle-game-dev-bench/lib64/selkies_input_interposer.so")
+            if socket_dir.is_dir() and input_hook.is_file():
+                env["SELKIES_JS_SOCKET_PATH"] = str(socket_dir)
+                env["LD_PRELOAD"] = (str(input_hook) + ":" + env.get("LD_PRELOAD", "")).rstrip(":")
         try:
             rc, info = probe(["glxinfo", "-B"], env)
             if rc or not re.search(r"OpenGL vendor string:\s*NVIDIA", info):
@@ -80,6 +91,7 @@ def main():
             print(f"Graphics prerequisite failed: {exc}", file=sys.stderr)
             return 78
         wine_bin = wine.with_name("wine64") if wine.with_name("wine64").is_file() else wine
+        configure_mouse(str(wine_bin), env)
         command = [str(wine_bin), str(game)]
         command.extend(args.game_args or
                        ["+set", "com_skipIntroVideo", "1",
@@ -88,6 +100,7 @@ def main():
                         "+set", "r_windowedWidth", "1280",
                         "+set", "r_windowedHeight", "720"])
         print("OpenGL target: direct NVIDIA Xorg :1", flush=True)
+        print("Input mode:", input_mode, flush=True)
         print("Stream this display using start_direct_stream.sh", flush=True)
         return subprocess.call(command, cwd=game.parent, env=env)
 

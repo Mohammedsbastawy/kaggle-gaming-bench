@@ -59,7 +59,7 @@ apt-get update -o DPkg::Lock::Timeout=120 -qq || true
 apt_install "core desktop" \
     xvfb openbox tint2 xterm pulseaudio pulseaudio-utils xauth dbus-x11 \
     libgl1-mesa-dri libgbm1 libpixman-1-0 libxkbcommon0 mesa-utils x11-utils vulkan-tools \
-    xdotool wmctrl wget curl cabextract p7zip-full zstd winetricks python3-pygame python3-aiohttp
+    xdotool xinput wmctrl wget curl cabextract p7zip-full zstd winetricks python3-pygame python3-aiohttp
 
 # Build tools (isolated so multilib issues don't block core)
 apt_install "build tools" git make gcc

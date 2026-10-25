@@ -80,7 +80,7 @@
   };
 
   function controlBase() {
-    const replaced = window.location.pathname.replace(/\/proxy\/8080(?:\/.*)?$/, "/proxy/8766");
+    const replaced = window.location.pathname.replace(/\/proxy\/(?:8080|8081)(?:\/.*)?$/, "/proxy/8766");
     return replaced === window.location.pathname ? "/proxy/8766" : replaced;
   }
 
@@ -219,7 +219,7 @@
         await target.requestPointerLock();
         toast("Gaming Mode enabled. Press Esc to exit.");
       } catch (error) {
-        toast(`Pointer lock unavailable: ${error.message}`);
+        toast("This browser blocked pointer lock. Open this 8081 stream in Chrome or Edge for mouse look.");
       }
     }
   }
@@ -240,8 +240,8 @@
       state.inputMode = result.mode;
       updateInputModeUI();
       toast(result.mode === "mouse_keyboard"
-        ? "Switched to 🖱️ Mouse & Keyboard Mode (Zero gamepad interference)"
-        : "Switched to 🎮 Gamepad Mode (Xbox 360 Controller)");
+        ? "Mouse & Keyboard selected. Restart the game to remove virtual controllers."
+        : "Gamepad selected. Restart the game to expose Xbox controllers.");
     } catch (error) {
       toast(`Input mode switch failed: ${error.message}`);
     } finally {
