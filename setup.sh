@@ -104,7 +104,16 @@ else
     echo 'NVIDIA GPU devices unavailable; GPU 3D cannot be enabled inside this container.'
 fi
 if [ -c /dev/nvidia-modeset ] && [ -c /dev/nvidia0 ]; then
-    apt_install "NVIDIA Xorg server support" xserver-xorg-core
+    # The Xorg binary alone cannot load NVIDIA GLX. Install the matching
+    # display driver from the same repository as the NVIDIA userspace stack.
+    nvidia_userspace_version=$(dpkg-query -W -f='${Version}' libnvidia-gl-580 2>/dev/null || true)
+    if [ -n "$nvidia_userspace_version" ]; then
+        apt_install "NVIDIA Xorg GLX server support" xserver-xorg-core \
+            "xserver-xorg-video-nvidia-580=$nvidia_userspace_version" \
+            "libnvidia-cfg1-580=$nvidia_userspace_version"
+    else
+        echo 'NVIDIA GL userspace is missing; skipping the optional Xorg backend.'
+    fi
 fi
 
 # 4d. DXVK 2.6.2 (DirectX 9/10/11 -> Vulkan) installation

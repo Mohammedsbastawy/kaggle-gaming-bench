@@ -1,8 +1,8 @@
 """Launch a 64-bit id Tech OpenGL game on the Selkies X desktop.
 
 The GLX extension must exist on the captured X server.  VirtualGL sends
-OpenGL work to the selected NVIDIA EGL device and copies completed frames
-back into the Wine window on DISPLAY; Selkies encodes that desktop separately.
+OpenGL work to the selected NVIDIA GLX server or EGL device and copies
+completed frames into the Wine window on DISPLAY. Selkies captures :0.
 """
 
 import argparse
@@ -29,8 +29,10 @@ def main():
                         help="Path to a 64-bit Windows OpenGL game executable")
     parser.add_argument("--wine", type=Path, required=True,
                         help="Path to Wine-GE's bin/wine or bin/wine64")
-    parser.add_argument("--egl-device", default="egl0",
-                        help="VirtualGL EGL device verified to map to GPU 0")
+    parser.add_argument("--vgl-display", default="auto",
+                        help="VirtualGL target: auto, :1, or egl0 (default: auto)")
+    parser.add_argument("--egl-device", default=None,
+                        help="Deprecated alias for --vgl-display")
     parser.add_argument("--prefix", type=Path,
                         default=Path("/home/gamer/.wine"))
     parser.add_argument("game_args", nargs=argparse.REMAINDER)
@@ -44,7 +46,6 @@ def main():
     env = os.environ.copy()
     env["DISPLAY"] = env.get("DISPLAY") or ":0"
     env["WINEPREFIX"] = str(args.prefix)
-    env["VGL_DISPLAY"] = args.egl_device
     env["VGL_COMPRESS"] = "proxy"
     env["SDL_AUDIODRIVER"] = "pulse"
     overrides = env.get("WINEDLLOVERRIDES", "")
@@ -65,24 +66,35 @@ def main():
                 "or use a GLX-capable captured X server."
             )
 
-        rc, info = probe([str(VGL), "-d", args.egl_device,
-                          "glxinfo", "-B"], env)
-        if (rc or not re.search(r"OpenGL vendor string:\s*NVIDIA", info)
-                or re.search(r"OpenGL renderer string:.*(?:llvmpipe|softpipe)", info, re.I)):
-            raise RuntimeError("VirtualGL NVIDIA probe failed:\n" + info[-2000:])
+        selected = args.egl_device or args.vgl_display
+        if selected == "auto":
+            candidates = ([":1"] if Path("/tmp/kaggle-game-dev-bench/gpu-xorg-ready").exists()
+                          else []) + ["egl0"]
+        else:
+            candidates = [selected]
+        failures = []
+        for candidate in candidates:
+            rc, info = probe([str(VGL), "-d", candidate, "glxinfo", "-B"], env)
+            if (not rc and re.search(r"OpenGL vendor string:\s*NVIDIA", info)
+                    and not re.search(r"OpenGL renderer string:.*(?:llvmpipe|softpipe)", info, re.I)):
+                selected = candidate
+                break
+            failures.append(f"{candidate}: {info[-500:]}")
+        else:
+            raise RuntimeError("VirtualGL NVIDIA probe failed:\n" + "\n".join(failures))
     except (OSError, subprocess.TimeoutExpired, RuntimeError) as exc:
         print(f"Graphics prerequisite failed: {exc}", file=sys.stderr)
         return 78
 
     # vglrun already preloads libdlfaker and libvglfaker by default.
     wine_bin = wine.with_name("wine64") if wine.with_name("wine64").is_file() else wine
-    command = [str(VGL), "-d", args.egl_device, str(wine_bin), str(game)]
+    env["VGL_DISPLAY"] = selected
+    command = [str(VGL), "-d", selected, str(wine_bin), str(game)]
     if not args.game_args:
-        command.extend(["+com_skipIntroVideo", "1", "+r_fullscreen", "0",
-                        "+r_mode", "-1", "+r_customWidth", "1280", "+r_customHeight", "720"])
+        command.extend(["-window", "+com_skipIntroVideo", "1", "+r_fullscreen", "0"])
     else:
         command.extend(args.game_args)
-    print("OpenGL target:", args.egl_device, flush=True)
+    print("OpenGL target:", selected, flush=True)
     print("Wine window:", env["DISPLAY"], flush=True)
     return subprocess.call(command, cwd=game.parent, env=env)
 

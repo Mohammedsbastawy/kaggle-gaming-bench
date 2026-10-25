@@ -1,12 +1,30 @@
 # id Tech 5 OpenGL on the Kaggle dual-T4 desktop
 
-## Why the game currently fails
+## What the live Kaggle session showed
 
-Wine-GE's X11 WGL bridge queries the **visible** X server for the GLX
-extension. The reported `GLX extension is missing` means the captured `:0`
-server fails that check. `vglrun -d egl0 glxinfo -B` proves that VirtualGL can
-reach NVIDIA through EGL; it does not prove that Wine can initialize WGL on
-this Xvfb. VirtualGL's EGL GLX emulation also requires GLX on the 2D X server.
+The original WGL failure was resolved: captured Xvfb `:0` now advertises GLX.
+In the live session on 2026-10-25, `qconsole.log` reported an NVIDIA OpenGL
+3.2 context and the game process mapped `libvglfaker.so`. `VGL_LOGO=1` drew
+the VirtualGL logo in the black game window. Thus Wine initialized WGL and
+VirtualGL delivered at least its overlay to Xvfb. The stream displayed that
+same black window, so Selkies did not cause this particular black image.
+
+The image stayed black with `VGL_SYNC=1`, synchronous readback, windowed mode,
+`+com_skipIntroVideo 1`, and even after temporarily renaming only
+`base/bink/loadvideo_pc_xboxone.bik`. The video was restored before the session
+ended. The game log rejected `r_customWidth` and `r_customHeight` as unknown
+commands. A direct Zink probe on Xvfb failed with `DRI3 not available` and
+`couldn't find RGB GLX visual or fbconfig`.
+
+The next test is VirtualGL's GLX backend on NVIDIA Xorg `:1`. VirtualGL's
+[architecture guide](https://github.com/VirtualGL/virtualgl/blob/main/doc/index.html)
+says its EGL backend emulates a subset of GLX using renderbuffers, while its
+GLX backend supports more GLX features. The old session expired before this
+test could be completed; this is a compatibility hypothesis, not a verified
+game fix.
+
+Wine-GE's X11 WGL bridge still requires GLX on the **visible** display `:0`.
+Check it separately from the VirtualGL hardware target:
 
 Check the server from the same account and environment used by Wine:
 
@@ -29,15 +47,16 @@ xdpyinfo -queryExtensions | grep -E '^[[:space:]]*GLX[[:space:]]+\(opcode:'
 ```
 
 If the packaged Xvfb still does not advertise GLX, it cannot be enabled with
-an environment variable. Use a build of Xvfb that contains the GLX extension,
-or make an NVIDIA Xorg server on GPU 0 the captured `:0` display and attach
-Selkies to that display. Starting NVIDIA Xorg on `:1` alone does not repair
+an environment variable. Starting NVIDIA Xorg on `:1` alone does not repair
 Wine's GLX query against a GLX-less `:0`.
 
-## Preferred game path after `:0` advertises GLX
+## Launch path after `:0` advertises GLX
 
-Use VirtualGL's EGL device backend first. It avoids the extra NVIDIA Xorg
-server while preserving the Selkies desktop on `:0`:
+The notebook installs `xserver-xorg-core` and the NVIDIA Xorg display driver,
+then `start_desktop.sh` tries to start GPU 0's headless GLX server on `:1`.
+`launch_idtech5.py` uses `:1` when `gpu-xorg-ready` exists and its NVIDIA probe
+passes; otherwise it falls back to `egl0`. Both paths draw into the Wine
+window on captured `:0`.
 
 ```bash
 export DISPLAY=:0
@@ -48,9 +67,8 @@ export PULSE_SERVER="${PULSE_SERVER:-unix:/run/user/1000/pulse/native}"
 /opt/VirtualGL/bin/vglrun -d egl0 glxinfo -B
 
 python3 /tmp/kaggle-game-dev-bench/launch_idtech5.py \
-  --wine /home/gamer/.config/heroic/tools/wine/Wine-GE-Proton8-26/bin/wine \
-  --egl-device egl0 \
-  '/path/to/WolfNewOrder_x64.exe'
+  --wine /home/gamer/.config/heroic/tools/wine/lutris-GE-Proton8-26-x86_64/bin/wine \
+  /home/gamer/Games/WolfensteinTNO/WolfNewOrder_x64.exe
 ```
 
 Use the EGL device that maps to **GPU 0**. `egl0` is an EGL enumeration ID,
@@ -70,21 +88,21 @@ renumbers that GPU as CUDA ordinal 0 inside Selkies; an encoder setting that
 also selects ordinal 1 can therefore select no device. Confirm the actual
 encoder device from Selkies logs and `nvidia-smi` rather than the variable names.
 
-## If VirtualGL's EGL backend fails a game-specific GLX feature
+## Test the NVIDIA GLX backend explicitly
 
 A headless NVIDIA Xorg `:1` bound to GPU 0 can provide VirtualGL's fuller GLX
 backend. It still sends the Wine window and completed pixels to GLX-capable
-Xvfb `:0`:
+Xvfb `:0`. Verify `gpu_xorg.sh` and its GPU 0 BusID before launching:
 
 ```bash
 # First verify that gpu_xorg.sh created GPU 0's NVIDIA GLX server.
 test -e /tmp/kaggle-game-dev-bench/gpu-xorg-ready
 DISPLAY=:1 XAUTHORITY=/tmp/kaggle-game-dev-bench/nvidia-Xauthority glxinfo -B
 
-DISPLAY=:0 VGL_COMPRESS=proxy \
-  /opt/VirtualGL/bin/vglrun -d :1 \
-  /home/gamer/.config/heroic/tools/wine/Wine-GE-Proton8-26/bin/wine \
-  '/path/to/WolfNewOrder_x64.exe'
+DISPLAY=:0 python3 /tmp/kaggle-game-dev-bench/launch_idtech5.py \
+  --vgl-display :1 \
+  --wine /home/gamer/.config/heroic/tools/wine/lutris-GE-Proton8-26-x86_64/bin/wine \
+  /home/gamer/Games/WolfensteinTNO/WolfNewOrder_x64.exe
 ```
 
 Ensure `gpu_xorg.sh` actually binds `:1` to GPU 0; a renderer string of
@@ -103,9 +121,9 @@ default: use `vglrun -d egl0 wine ...`, without `-dl`.
 ## Black screen with game audio
 
 Audio and a live Wine process show that startup progressed; they do not show
-whether a non-black frame reached the Xvfb window. Use one diagnostic launch
-that skips the game's intro video, requests a 1280x720 window, and makes
-VirtualGL synchronously deliver each frame. Replace the executable path:
+whether a non-black frame reached the Xvfb window. Use this diagnostic launch
+to request windowed mode and synchronous frame delivery. It did not fix the
+old session's black image, but it distinguished delivery from game content:
 
 ```bash
 export DISPLAY=:0
@@ -117,18 +135,17 @@ export VGL_PROFILE=1
 export VGL_VERBOSE=1
 
 python3 /tmp/kaggle-game-dev-bench/launch_idtech5.py \
-  --wine /home/gamer/.config/heroic/tools/wine/Wine-GE-Proton8-26/bin/wine \
-  --egl-device egl0 \
-  '/path/to/WolfNewOrder_x64.exe' \
-  +com_skipIntroVideo 1 \
-  +r_fullscreen 0 +r_mode -1 +r_customWidth 1280 +r_customHeight 720 \
+  --wine /home/gamer/.config/heroic/tools/wine/lutris-GE-Proton8-26-x86_64/bin/wine \
+  /home/gamer/Games/WolfensteinTNO/WolfNewOrder_x64.exe \
+  -window +com_skipIntroVideo 1 +r_fullscreen 0 \
   2>&1 | tee /tmp/wolf-vgl.log
 ```
 
 `+com_skipIntroVideo 1` is used by the published Lutris installer for this
-title. The window and resolution cvars are a diagnostic request, not a
-verified fix for this Kaggle instance. Wine's virtual desktop can be tested
-separately if the game still creates an off-screen or incorrectly sized window.
+title, but it did not cure the live black screen. Inspect the engine log at
+`/home/gamer/.wine/drive_c/users/gamer/Saved Games/MachineGames/Wolfenstein The New Order/base/qconsole.log`
+for the actual renderer and command line results. The game rejected the
+previous `r_customWidth` and `r_customHeight` flags.
 
 Inspect the resulting window and the frame path while the game is active:
 
@@ -148,7 +165,7 @@ Interpret the evidence before changing more settings:
 | --- | --- |
 | Xvfb PNG has the game, browser is black | Investigate Selkies capture/encode, not Wine or VirtualGL. |
 | Game window is absent or outside 1280x720 | Check its X11 geometry and try Wine's virtual desktop at 1280x720. |
-| VirtualGL reports frame transfers or shows its logo over a black game image | The transport works; focus on the game's movie/rendering path and game log. |
+| VirtualGL shows its logo over a black game image | The overlay reached Xvfb; check `qconsole.log`, then compare the EGL and GLX VirtualGL backends. |
 | No frame transfers or logo, while the game window exists | Check that `libvglfaker.so` is loaded into the actual Wine game process; then try the `:1` NVIDIA GLX backend. |
 | EGL backend fails but `:1` NVIDIA GLX succeeds | Use `vglrun -d :1` with the same captured `DISPLAY=:0`. |
 
