@@ -7,6 +7,9 @@ LOG="$BENCH/logs/gpu-xorg.log"
 rm -f "$READY"
 mkdir -p "$BENCH/logs"
 
+if [ ! -c /dev/nvidia-modeset ]; then
+    mknod -m 666 /dev/nvidia-modeset c 195 254 2>/dev/null || nvidia-modprobe -m 2>/dev/null || true
+fi
 if [ ! -c /dev/nvidiactl ] || [ ! -c /dev/nvidia0 ] || [ ! -c /dev/nvidia-modeset ]; then
     echo 'NVIDIA display devices were not mounted by the container host.' | tee -a "$LOG"
     exit 0
