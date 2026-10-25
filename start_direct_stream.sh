@@ -17,7 +17,7 @@ DISPLAY=:1 XAUTHORITY="$BENCH/nvidia-Xauthority" \
     glxinfo -B | grep -q 'OpenGL vendor string: NVIDIA'
 if command -v xrandr >/dev/null; then
     DISPLAY=:1 XAUTHORITY="$BENCH/nvidia-Xauthority" \
-        xrandr --output DVI-D-0 --mode "${WIDTH}x${HEIGHT}"
+        xrandr -s "${WIDTH}x${HEIGHT}" 2>/dev/null || true
 fi
 
 # Ensure independent PulseAudio daemon is running

@@ -65,7 +65,7 @@ Section "Device"
     Driver "nvidia"
     BusID "$bus_id"
     Option "AllowEmptyInitialConfiguration" "true"
-    Option "ConnectedMonitor" "DFP-0"
+    Option "UseDisplayDevice" "none"
 EndSection
 Section "Screen"
     Identifier "Screen0"
@@ -73,7 +73,7 @@ Section "Screen"
     DefaultDepth 24
     SubSection "Display"
         Depth 24
-        Modes "1280x720"
+        Virtual 1280 720
     EndSubSection
 EndSection
 EOF
@@ -94,7 +94,7 @@ if [ ! -S /tmp/.X11-unix/X1 ]; then
     exit 0
 fi
 DISPLAY=:1 XAUTHORITY="$AUTH" xhost +si:localuser:gamer >> "$LOG" 2>&1
-if DISPLAY=:1 XAUTHORITY="$AUTH" glxinfo -B 2>&1 | grep -Eiq 'OpenGL renderer string:.*NVIDIA'; then
+if DISPLAY=:1 XAUTHORITY="$AUTH" glxinfo -B 2>&1 | grep -Eiq 'OpenGL (vendor|renderer) string:.*(NVIDIA|Tesla)'; then
     touch "$READY"
     echo 'Verified NVIDIA OpenGL on display :1.' | tee -a "$LOG"
 else

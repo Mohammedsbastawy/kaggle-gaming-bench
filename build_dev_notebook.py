@@ -469,18 +469,35 @@ try:
 except Exception:
     pass
 
-# Launch unified direct NVIDIA gaming desktop on port 8080
+# Launch streaming gaming desktop on port 8080
+log = (BENCH / 'selkies.log').open('a', buffering=1)
 direct_script = BENCH / 'start_direct_stream.sh'
-print('▶ Starting unified direct NVIDIA gaming desktop on port 8080...', flush=True)
-direct_res = subprocess.run(['bash', str(direct_script)],
-                            env=dict(os.environ, DIRECT_STREAM_PORT='8080'),
-                            capture_output=True, text=True)
-if direct_res.returncode != 0:
-    print('Direct stream startup message:', direct_res.stdout + direct_res.stderr, flush=True)
+started = False
 
-server_pid = (BENCH / 'direct-stream.pid').read_text().strip() if (BENCH / 'direct-stream.pid').exists() else None
-if server_pid:
-    pidfile.write_text(server_pid)
+if direct_script.is_file():
+    try:
+        print('▶ Starting unified direct NVIDIA Xorg stream on port 8080...', flush=True)
+        direct_res = subprocess.run(['bash', str(direct_script)],
+                                    env=dict(os.environ, DIRECT_STREAM_PORT='8080'),
+                                    capture_output=True, text=True, timeout=35)
+        if direct_res.returncode == 0:
+            started = True
+            server_pid = (BENCH / 'direct-stream.pid').read_text().strip() if (BENCH / 'direct-stream.pid').exists() else None
+            if server_pid:
+                pidfile.write_text(server_pid)
+        else:
+            print('Direct stream notice:', (direct_res.stdout + direct_res.stderr)[-500:], flush=True)
+    except Exception as e:
+        print('Direct stream attempt skipped:', e, flush=True)
+
+if not started:
+    print('▶ Starting verified Selkies fallback desktop on port 8080...', flush=True)
+    server = subprocess.Popen(['selkies-session', '--session=' + str(wrapper),
+                               '--port=8080', '--enable-basic-auth=false'],
+                              stdout=log, stderr=subprocess.STDOUT,
+                              stdin=subprocess.DEVNULL, env=env,
+                              start_new_session=True)
+    pidfile.write_text(str(server.pid))
 
 health = None
 for _ in range(75):
@@ -493,9 +510,10 @@ for _ in range(75):
         time.sleep(1)
 
 if health != 'OK':
-    stream_log = (BENCH / 'logs' / 'direct-stream.log').read_text(errors='replace')[-3000:] if (BENCH / 'logs' / 'direct-stream.log').exists() else ''
-    xorg_log = (BENCH / 'logs' / 'gpu-xorg.log').read_text(errors='replace')[-2000:] if (BENCH / 'logs' / 'gpu-xorg.log').exists() else ''
-    raise RuntimeError(f'Direct NVIDIA desktop did not start. Log tail:\n{stream_log}\nXorg:\n{xorg_log}')
+    selkies_tail = (BENCH / 'selkies.log').read_text(errors='replace')[-3000:] if (BENCH / 'selkies.log').exists() else ''
+    stream_tail = (BENCH / 'logs' / 'direct-stream.log').read_text(errors='replace')[-3000:] if (BENCH / 'logs' / 'direct-stream.log').exists() else ''
+    xorg_tail = (BENCH / 'logs' / 'gpu-xorg.log').read_text(errors='replace')[-2000:] if (BENCH / 'logs' / 'gpu-xorg.log').exists() else ''
+    raise RuntimeError(f'Desktop did not start. Logs:\n{stream_tail}\n{selkies_tail}\n{xorg_tail}')
 
 with urllib.request.urlopen('http://127.0.0.1:8080/api/status', timeout=5) as response:
     status = json.load(response)

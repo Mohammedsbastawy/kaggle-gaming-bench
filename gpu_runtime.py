@@ -511,7 +511,7 @@ def launch(app, wine):
 
     if vgl_ready:
         env["VGL_DISPLAY"] = vgl_display
-        env.update(VGL_READBACK="pbo", VGL_SPOIL="1", VGL_SYNC="0", VGL_COMPRESS="proxy")
+        env.update(VGL_READBACK="sync", VGL_SPOIL="0", VGL_SYNC="1", VGL_COMPRESS="proxy")
         vgl_fps = os.environ.get("GAMELAB_VGL_FPS", "60")
         try:
             if 0 <= float(vgl_fps) <= 240:
