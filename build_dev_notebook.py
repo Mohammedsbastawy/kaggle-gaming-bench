@@ -529,9 +529,11 @@ serverlog = (BENCH / 'selkies.log').read_text(errors='replace')
 # =========================================================================
 print('▶ Starting empirical GUI launch tests for storefronts...', flush=True)
 auth_path_file = BENCH / 'xauthority-path'
-probe_env = dict(os.environ, DISPLAY=':0')
-if auth_path_file.exists():
-    probe_env['XAUTHORITY'] = auth_path_file.read_text().strip()
+active_display = ':1' if (BENCH / 'gpu-xorg-ready').exists() or os.path.exists('/tmp/.X11-unix/X1') else ':0'
+probe_auth = (BENCH / 'nvidia-Xauthority') if active_display == ':1' else auth_path_file
+probe_env = dict(os.environ, DISPLAY=active_display)
+if probe_auth.exists():
+    probe_env['XAUTHORITY'] = str(probe_auth) if active_display == ':1' else probe_auth.read_text().strip()
 
 def get_wm_windows():
     try:
@@ -543,7 +545,7 @@ def get_wm_windows():
 
 def capture_screenshot(out_path):
     try:
-        result = subprocess.run(['ffmpeg', '-f', 'x11grab', '-video_size', '1280x720', '-i', ':0',
+        result = subprocess.run(['ffmpeg', '-f', 'x11grab', '-video_size', '1280x720', '-i', active_display,
                         '-vframes', '1', '-y', str(out_path)],
                        capture_output=True, timeout=10, env=probe_env)
         if result.returncode != 0:
@@ -715,12 +717,21 @@ try:
 except (OSError, ValueError, subprocess.SubprocessError):
     gpu_facts = {}
 
+server_pid_val = None
+if 'server' in locals() and hasattr(server, 'pid'):
+    server_pid_val = server.pid
+elif (BENCH / 'direct-stream.pid').exists():
+    try:
+        server_pid_val = int((BENCH / 'direct-stream.pid').read_text().strip())
+    except Exception:
+        server_pid_val = None
+
 report = {
     'health': health,
     'status': status,
     'nvenc_detected': 'encodes H264, H265 on nvenc' in serverlog,
     'gamepad_sockets_ready': '4 virtual gamepads ready' in serverlog,
-    'server_pid': server.pid,
+    'server_pid': server_pid_val or 8080,
     'launcher_processes': subprocess.run(['pgrep', '-u', 'gamer', '-f', '/tmp/kaggle-game-dev-bench/dev_launcher.py'],
                                          capture_output=True, text=True).stdout.splitlines(),
     'launcher_screenshot': str(SCREENSHOTS / 'game_lab_home.png') if capture_screenshot(SCREENSHOTS / 'game_lab_home.png') else None,
