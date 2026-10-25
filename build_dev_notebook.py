@@ -590,6 +590,33 @@ smoke_tests = [
     }
 ]
 
+def get_active_pulse() -> str:
+    path = BENCH / 'pulse-server-path'
+    if path.is_file():
+        try:
+            val = path.read_text().strip()
+            if val:
+                return val
+        except Exception:
+            pass
+    for s in [Path('/run/user/1000/pulse/native'), *Path('/tmp').glob('pulse-*/native'), Path('/run/user/0/pulse/native')]:
+        if s.exists():
+            val = f"unix:{s}"
+            try:
+                path.write_text(val, encoding='utf-8')
+                os.chmod(path, 0o666)
+            except Exception:
+                pass
+            return val
+    fallback = "unix:/run/user/1000/pulse/native"
+    try:
+        path.write_text(fallback, encoding='utf-8')
+        os.chmod(path, 0o666)
+    except Exception:
+        pass
+    return fallback
+
+active_pulse = get_active_pulse()
 smoke_results = {}
 for test in smoke_tests:
     tid = test['id']
@@ -604,7 +631,7 @@ for test in smoke_tests:
         continue
         
     proc = subprocess.Popen(['runuser', '-u', 'gamer', '--', 'env', '-u', 'DBUS_SESSION_BUS_ADDRESS',
-                             'PULSE_SERVER=' + (BENCH / 'pulse-server-path').read_text().strip(),
+                             'PULSE_SERVER=' + active_pulse,
                              'dbus-run-session', '--', '/bin/bash', script], start_new_session=True)
     window_found = False
     matching_titles = []
@@ -704,7 +731,7 @@ report = {
                                 text=True, timeout=10, env=probe_env).stderr[-800:],
     'xauthority_path': probe_env.get('XAUTHORITY'),
     'gamer_audio_probe': subprocess.run(['runuser', '-u', 'gamer', '--', 'env',
-                                         'PULSE_SERVER=' + (BENCH / 'pulse-server-path').read_text().strip(),
+                                         'PULSE_SERVER=' + active_pulse,
                                          'pactl', 'info'], capture_output=True,
                                          text=True, timeout=10).returncode,
     'selkies_log_tail': (BENCH / 'selkies.log').read_text(errors='replace')[-3000:],

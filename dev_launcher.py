@@ -85,19 +85,14 @@ def game_env() -> Dict[str, str]:
     server = pulse_server()
     if server:
         env["PULSE_SERVER"] = server
-    mode = get_launcher_input_mode()
-    if mode == "mouse_keyboard":
-        env.pop("LD_PRELOAD", None)
-        env["SDL_JOYSTICK_DEVICE"] = ""
-        env["SDL_JOYSTICK_DISABLE_UDEV"] = "1"
-        env["WINEDLLOVERRIDES"] = env.get("WINEDLLOVERRIDES", "") + ";winebus.sys=d"
-    else:
-        env["SELKIES_JS_SOCKET_PATH"] = ("/tmp/kaggle-game-dev-bench/direct-stream-sockets"
-                                         if env.get("GAMELAB_DIRECT_XORG") == "1" else "/tmp")
-        env["SDL_JOYSTICK_DISABLE_UDEV"] = "1"
-        env["SDL_JOYSTICK_DEVICE"] = "/dev/input/event1000:/dev/input/event1001:/dev/input/event1002:/dev/input/event1003"
-        interposer = "/tmp/kaggle-game-dev-bench/$LIB/selkies_input_interposer.so:/tmp/kaggle-game-dev-bench/$LIB/selkies_fake_udev.so"
-        env["LD_PRELOAD"] = os.environ.get("LD_PRELOAD", interposer)
+    # Unified Dual-Input: Enable both Selkies virtual Xbox 360 gamepads AND
+    # native X11 mouse/keyboard simultaneously. No artificial mode switching.
+    env["SELKIES_JS_SOCKET_PATH"] = ("/tmp/kaggle-game-dev-bench/direct-stream-sockets"
+                                     if env.get("GAMELAB_DIRECT_XORG") == "1" else "/tmp")
+    env["SDL_JOYSTICK_DISABLE_UDEV"] = "1"
+    env["SDL_JOYSTICK_DEVICE"] = "/dev/input/event1000:/dev/input/event1001:/dev/input/event1002:/dev/input/event1003"
+    interposer = "/usr/$LIB/selkies_input_interposer.so:/usr/$LIB/selkies_fake_udev.so"
+    env["LD_PRELOAD"] = (interposer + ":" + env.get("LD_PRELOAD", "")).rstrip(":")
     return env
 
 

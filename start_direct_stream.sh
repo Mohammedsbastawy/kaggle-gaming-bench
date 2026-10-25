@@ -30,20 +30,24 @@ if ! pgrep -u gamer -x pulseaudio >/dev/null 2>&1 && ! pgrep -u root -x pulseaud
 fi
 
 PULSE_SOCK=""
-for s in /run/user/1000/pulse/native /tmp/pulse-*/native /run/user/0/pulse/native; do
-    if [ -S "$s" ]; then
-        chmod 666 "$s" 2>/dev/null || true
-        PULSE_SOCK="unix:$s"
-        break
-    fi
+for attempt in $(seq 1 10); do
+    for s in /run/user/1000/pulse/native /tmp/pulse-*/native /run/user/0/pulse/native; do
+        if [ -S "$s" ]; then
+            chmod 666 "$s" 2>/dev/null || true
+            PULSE_SOCK="unix:$s"
+            break 2
+        fi
+    done
+    sleep 0.5
 done
 
-if [ -n "$PULSE_SOCK" ]; then
-    echo "$PULSE_SOCK" > "$BENCH/pulse-server-path"
-    chmod 666 "$BENCH/pulse-server-path" 2>/dev/null || true
+if [ -z "$PULSE_SOCK" ]; then
+    PULSE_SOCK="unix:/run/user/1000/pulse/native"
 fi
+echo "$PULSE_SOCK" > "$BENCH/pulse-server-path"
+chmod 666 "$BENCH/pulse-server-path" 2>/dev/null || true
 
-PULSE_SERVER="$(cat "$BENCH/pulse-server-path" 2>/dev/null || true)"
+PULSE_SERVER="$PULSE_SOCK"
 export DISPLAY=:1 XAUTHORITY="$BENCH/nvidia-Xauthority" PULSE_SERVER
 ENCODER_DEVICE=0
 if [ -e /dev/nvidia1 ]; then ENCODER_DEVICE=1; fi
