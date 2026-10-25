@@ -108,8 +108,13 @@ if [ -c /dev/nvidia0 ]; then
     if [ ! -c /dev/nvidia-modeset ]; then
         mknod -m 666 /dev/nvidia-modeset c 195 254 2>/dev/null || nvidia-modprobe -m 2>/dev/null || true
     fi
-    echo "▶ Installing NVIDIA Xorg display driver and X server support..."
-    apt_install "NVIDIA Xorg GLX server support" xserver-xorg-core xserver-xorg-video-nvidia-580 libnvidia-cfg1-580
+    echo "▶ Installing NVIDIA Xorg server support..."
+    apt_install "NVIDIA Xorg GLX server support" xserver-xorg-core
+    # Ensure host NVIDIA userspace libraries take precedence
+    if [ -d /usr/local/nvidia/lib64 ]; then
+        echo "/usr/local/nvidia/lib64" > /etc/ld.so.conf.d/00-nvidia-host.conf
+        ldconfig 2>/dev/null || true
+    fi
 fi
 
 # 4d. DXVK 2.6.2 (DirectX 9/10/11 -> Vulkan) installation
