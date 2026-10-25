@@ -726,6 +726,19 @@ elif (BENCH / 'direct-stream.pid').exists():
     except Exception:
         server_pid_val = None
 
+audio_cookie = '/home/gamer/.config/pulse/cookie'
+audio_env = dict(os.environ, PULSE_SERVER=active_pulse, PULSE_COOKIE=audio_cookie)
+gamer_audio = subprocess.run(
+    ['runuser', '-u', 'gamer', '--', 'env', 'HOME=/home/gamer',
+     'XDG_RUNTIME_DIR=' + str(BENCH / 'pulse-runtime'),
+     'PULSE_SERVER=' + active_pulse, 'PULSE_COOKIE=' + audio_cookie,
+     'pactl', 'info'], capture_output=True, text=True, timeout=10)
+streamer_audio = subprocess.run(['pactl', 'info'], capture_output=True,
+                                text=True, timeout=10, env=audio_env)
+audio_sources = subprocess.run(['pactl', 'list', 'short', 'sources'],
+                               capture_output=True, text=True, timeout=10,
+                               env=audio_env)
+
 report = {
     'health': health,
     'status': status,
@@ -741,10 +754,11 @@ report = {
     'x11_probe': subprocess.run(['xdpyinfo', '-display', ':0'], capture_output=True,
                                 text=True, timeout=10, env=probe_env).stderr[-800:],
     'xauthority_path': probe_env.get('XAUTHORITY'),
-    'gamer_audio_probe': subprocess.run(['runuser', '-u', 'gamer', '--', 'env',
-                                         'PULSE_SERVER=' + active_pulse,
-                                         'pactl', 'info'], capture_output=True,
-                                         text=True, timeout=10).returncode,
+    'gamer_audio_probe': gamer_audio.returncode,
+    'gamer_audio_error': gamer_audio.stderr[-400:],
+    'streamer_audio_probe': streamer_audio.returncode,
+    'streamer_audio_error': streamer_audio.stderr[-400:],
+    'audio_monitor_probe': 'output.monitor' in audio_sources.stdout,
     'selkies_log_tail': (BENCH / 'selkies.log').read_text(errors='replace')[-3000:],
     'desktop_components': {
         'openbox': check_bin('openbox'),

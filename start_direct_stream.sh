@@ -20,35 +20,52 @@ if command -v xrandr >/dev/null; then
         xrandr -s "${WIDTH}x${HEIGHT}" 2>/dev/null || true
 fi
 
-# Ensure independent PulseAudio daemon is running
-mkdir -p /home/gamer/.config/pulse /run/user/1000/pulse /tmp/pulse 2>/dev/null || true
-chmod 777 /run/user/1000 /run/user/1000/pulse /tmp/pulse 2>/dev/null || true
-
-if ! pgrep -u gamer -x pulseaudio >/dev/null 2>&1 && ! pgrep -u root -x pulseaudio >/dev/null 2>&1; then
-    runuser -u gamer -- pulseaudio --daemonize=yes --exit-idle-time=-1 --disallow-exit=yes 2>/dev/null || \
-    pulseaudio --system --daemonize=yes --disallow-exit=yes 2>/dev/null || true
+# Use one stable, gamer-owned PulseAudio runtime for Wine and Selkies. A
+# socket pathname alone is not proof of a running or authenticated server.
+AUDIO_RUNTIME="$BENCH/pulse-runtime"
+AUDIO_COOKIE=/home/gamer/.config/pulse/cookie
+PULSE_SERVER="unix:$AUDIO_RUNTIME/pulse/native"
+install -d -o gamer -g gamer -m 700 /home/gamer/.config/pulse "$AUDIO_RUNTIME" "$AUDIO_RUNTIME/pulse"
+if [ -f "$AUDIO_COOKIE" ]; then
+    chown gamer:gamer "$AUDIO_COOKIE"
+    chmod 600 "$AUDIO_COOKIE"
 fi
-
-PULSE_SOCK=""
-for attempt in $(seq 1 10); do
-    for s in /run/user/1000/pulse/native /tmp/pulse-*/native /run/user/0/pulse/native; do
-        if [ -S "$s" ]; then
-            chmod 666 "$s" 2>/dev/null || true
-            PULSE_SOCK="unix:$s"
-            break 2
-        fi
-    done
+pulse_user() {
+    runuser -u gamer -- env HOME=/home/gamer XDG_RUNTIME_DIR="$AUDIO_RUNTIME" \
+        PULSE_SERVER="$PULSE_SERVER" PULSE_COOKIE="$AUDIO_COOKIE" "$@"
+}
+if ! pulse_user pactl info >/dev/null 2>&1; then
+    runuser -u gamer -- env HOME=/home/gamer XDG_RUNTIME_DIR="$AUDIO_RUNTIME" \
+        PULSE_COOKIE="$AUDIO_COOKIE" \
+        pulseaudio --daemonize=yes --exit-idle-time=-1 --disallow-exit=yes \
+        >> "$BENCH/logs/pulseaudio.log" 2>&1 || true
+fi
+audio_ready=false
+for attempt in $(seq 1 20); do
+    if [ -S "$AUDIO_RUNTIME/pulse/native" ] && pulse_user pactl info >/dev/null 2>&1; then
+        audio_ready=true
+        break
+    fi
     sleep 0.5
 done
-
-if [ -z "$PULSE_SOCK" ]; then
-    PULSE_SOCK="unix:/run/user/1000/pulse/native"
+if [ "$audio_ready" = true ]; then
+    if ! pulse_user pactl list short sinks | awk '$2 == "output" { found=1 } END { exit !found }'; then
+        pulse_user pactl load-module module-null-sink sink_name=output \
+            sink_properties=device.description=GameAudio >/dev/null || true
+    fi
+    pulse_user pactl set-default-sink output || true
+    pulse_user pactl set-sink-mute output 0 || true
+    pulse_user pactl set-sink-volume output 100% || true
+    if ! PULSE_SERVER="$PULSE_SERVER" PULSE_COOKIE="$AUDIO_COOKIE" pactl info >/dev/null 2>&1; then
+        echo 'Selkies cannot authenticate to the gamer PulseAudio server.' >&2
+    fi
+else
+    echo "PulseAudio did not start; see $BENCH/logs/pulseaudio.log" >&2
 fi
-echo "$PULSE_SOCK" > "$BENCH/pulse-server-path"
-chmod 666 "$BENCH/pulse-server-path" 2>/dev/null || true
-
-PULSE_SERVER="$PULSE_SOCK"
-export DISPLAY=:1 XAUTHORITY="$BENCH/nvidia-Xauthority" PULSE_SERVER
+printf '%s' "$PULSE_SERVER" > "$BENCH/pulse-server-path"
+chmod 644 "$BENCH/pulse-server-path"
+export DISPLAY=:1 XAUTHORITY="$BENCH/nvidia-Xauthority" PULSE_SERVER PULSE_COOKIE="$AUDIO_COOKIE"
+export PULSE_SINK=output
 ENCODER_DEVICE=0
 if [ -e /dev/nvidia1 ]; then ENCODER_DEVICE=1; fi
 export CUDA_VISIBLE_DEVICES="$ENCODER_DEVICE"
@@ -81,7 +98,8 @@ start_desktop_program() {
         return
     fi
     runuser -u gamer -- env DISPLAY=:1 HOME=/home/gamer \
-        PULSE_SERVER="$PULSE_SERVER" SDL_AUDIODRIVER=pulse \
+        XDG_RUNTIME_DIR="$AUDIO_RUNTIME" PULSE_SERVER="$PULSE_SERVER" \
+        PULSE_COOKIE="$AUDIO_COOKIE" PULSE_SINK=output SDL_AUDIODRIVER=pulse \
         CUDA_VISIBLE_DEVICES=0 GAMELAB_DIRECT_XORG=1 \
         SELKIES_JS_SOCKET_PATH="$SELKIES_JS_SOCKET_PATH" \
         PYTHONPATH=/root/.local/lib/python3.13/site-packages:/usr/local/lib/python3.13/dist-packages \
@@ -105,6 +123,8 @@ fi
 # This process runs as root because Xorg rejected the gamer's MIT-SHM attach.
 # Disable command execution and transfers on this privileged stream.
 nohup env SELKIES_ENCODER_DEVICE="$ENCODER_DEVICE" SELKIES_ENCODER=h264enc \
+    SELKIES_AUDIO_ENABLED=true SELKIES_AUDIO_ON_START=true \
+    SELKIES_AUDIO_DEVICE_NAME=output.monitor \
     python3 -m selkies --port="$PORT" --enable-basic-auth=false \
     --command-enabled=false --file-transfers=none --printing-enabled=false \
     --web-root="$BENCH/web-root" --ui-title='7BZ Dev Cloud Game' \
