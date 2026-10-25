@@ -108,6 +108,9 @@ start_desktop_program() {
 }
 start_desktop() {
     chmod 666 "$SELKIES_JS_SOCKET_PATH"/*.sock 2>/dev/null || true
+    # The HUD's input-mode switch and diagnostics live on this control port.
+    # The fallback desktop starts it separately, but direct Xorg must too.
+    start_desktop_program control python3 "$BENCH/session_control.py"
     start_desktop_program openbox openbox --config-file "$BENCH/direct-openbox-rc.xml"
     if command -v tint2 >/dev/null; then
         start_desktop_program tint2 tint2 -c "$BENCH/tint2rc"
@@ -126,6 +129,8 @@ nohup env SELKIES_ENCODER_DEVICE="$ENCODER_DEVICE" SELKIES_ENCODER=h264enc \
     SELKIES_AUDIO_ENABLED=true SELKIES_AUDIO_ON_START=true \
     SELKIES_AUDIO_DEVICE_NAME=output.monitor \
     python3 -m selkies --port="$PORT" --enable-basic-auth=false \
+    --framerate=60,30-60 --video-bitrate=8000,2000-12000 \
+    --backpressure-queue-size=4 \
     --command-enabled=false --file-transfers=none --printing-enabled=false \
     --web-root="$BENCH/web-root" --ui-title='7BZ Dev Cloud Game' \
     --ui-show-sidebar=true --ui-show-logo=false \

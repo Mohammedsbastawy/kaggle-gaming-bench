@@ -68,19 +68,26 @@ def main():
         env.pop("VGL_DISPLAY", None)
         for key in ("VGL_SYNC", "VGL_READBACK", "VGL_LOGO", "VGL_PROFILE"):
             env.pop(key, None)
-        # Unified Dual-Input: Enable both Selkies virtual Xbox 360 gamepads AND
-        # native X11 mouse/keyboard simultaneously. No artificial mode switching.
-        socket_dir = Path("/tmp/kaggle-game-dev-bench/direct-stream-sockets")
-        candidates = [
-            "/usr/$LIB/selkies_input_interposer.so:/usr/$LIB/selkies_fake_udev.so",
-            "/tmp/kaggle-game-dev-bench/lib64/selkies_input_interposer.so:/tmp/kaggle-game-dev-bench/lib64/selkies_fake_udev.so",
-            "/tmp/kaggle-game-dev-bench/$LIB/selkies_input_interposer.so:/tmp/kaggle-game-dev-bench/$LIB/selkies_fake_udev.so"
-        ]
-        interposer = next((c for c in candidates if Path(c.split(":")[0].replace("$LIB", "lib64")).is_file() or Path(c.split(":")[0].replace("$LIB", "lib/x86_64-linux-gnu")).is_file()), candidates[0])
-        env["SELKIES_JS_SOCKET_PATH"] = str(socket_dir) if socket_dir.is_dir() else "/tmp"
+        input_mode = get_input_mode()
         env["SDL_JOYSTICK_DISABLE_UDEV"] = "1"
-        env["SDL_JOYSTICK_DEVICE"] = "/dev/input/event1000:/dev/input/event1001:/dev/input/event1002:/dev/input/event1003"
-        env["LD_PRELOAD"] = (interposer + ":" + env.get("LD_PRELOAD", "")).rstrip(":")
+        if input_mode == "mouse_keyboard":
+            # Wine must not enumerate Selkies' virtual Xbox devices in FPS
+            # mouse mode. X11/XTEST still carries pointer and keyboard input.
+            env.pop("LD_PRELOAD", None)
+            env.pop("SELKIES_JS_SOCKET_PATH", None)
+            env["SDL_JOYSTICK_DEVICE"] = ""
+            env["WINEDLLOVERRIDES"] += ";winebus.sys=d"
+        else:
+            socket_dir = Path("/tmp/kaggle-game-dev-bench/direct-stream-sockets")
+            candidates = [
+                "/usr/$LIB/selkies_input_interposer.so:/usr/$LIB/selkies_fake_udev.so",
+                "/tmp/kaggle-game-dev-bench/lib64/selkies_input_interposer.so:/tmp/kaggle-game-dev-bench/lib64/selkies_fake_udev.so",
+                "/tmp/kaggle-game-dev-bench/$LIB/selkies_input_interposer.so:/tmp/kaggle-game-dev-bench/$LIB/selkies_fake_udev.so"
+            ]
+            interposer = next((c for c in candidates if Path(c.split(":")[0].replace("$LIB", "lib64")).is_file() or Path(c.split(":")[0].replace("$LIB", "lib/x86_64-linux-gnu")).is_file()), candidates[0])
+            env["SELKIES_JS_SOCKET_PATH"] = str(socket_dir) if socket_dir.is_dir() else "/tmp"
+            env["SDL_JOYSTICK_DEVICE"] = "/dev/input/event1000:/dev/input/event1001:/dev/input/event1002:/dev/input/event1003"
+            env["LD_PRELOAD"] = (interposer + ":" + env.get("LD_PRELOAD", "")).rstrip(":")
         try:
             rc, info = probe(["glxinfo", "-B"], env)
             if rc or not re.search(r"OpenGL vendor string:\s*NVIDIA", info):
@@ -99,7 +106,7 @@ def main():
                         "+set", "r_windowedHeight", "720",
                         "+set", "in_mouse", "1"])
         print("OpenGL target: direct NVIDIA Xorg :1", flush=True)
-        print("Input mode: unified (Mouse + Keyboard + Gamepad)", flush=True)
+        print("Input mode:", input_mode, flush=True)
         print("Stream this display using start_direct_stream.sh", flush=True)
         return subprocess.call(command, cwd=game.parent, env=env)
 

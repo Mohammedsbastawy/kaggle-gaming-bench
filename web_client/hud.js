@@ -165,7 +165,8 @@
     if (!lastGpuCheck && total) {
       stat("gpu0_metric", `${format(used / gib, 1)} / ${format(total / gib, 1)} GB`);
     }
-    const transport = sample.client.transport || "websockets";
+    const transport = sample.client.transport || window.__SELKIES_STREAMING_MODE__ ||
+      document.getElementById("streamModeSelect")?.value || "websockets";
     stat("transport", transport === "webrtc" ? "WebRTC" : "WebSocket");
     stat("packet", transport === "webrtc" && latest.packet_loss_percent !== undefined
       ? `${format(latest.packet_loss_percent, 2)}%` : "N/A (WS)");
@@ -200,28 +201,11 @@
     post({ type: "statsOpen", open: true });
   }
 
-  async function togglePointer() {
-    if (document.pointerLockElement) {
-      document.exitPointerLock();
-      return;
-    }
-    // Activate Selkies Gaming Mode for raw relative hardware deltas
+  function togglePointer() {
+    // Selkies owns fullscreen, pointer lock, and the relative-motion handler.
+    // A second requestPointerLock from this HUD can steal its input target.
     post({ type: "requestGamingMode" });
-    if (window.webrtcInput && typeof window.webrtcInput.enterGamingMode === "function") {
-      try { window.webrtcInput.enterGamingMode(); } catch (_) {}
-    }
-    const target = document.getElementById("videoCanvas") || document.getElementById("stream") || document.querySelector("canvas") || document.documentElement;
-    try {
-      await target.requestPointerLock({ unadjustedMovement: true });
-      toast("Gaming Mode: 360° mouse look enabled. Press Esc to exit.");
-    } catch (_error) {
-      try {
-        await target.requestPointerLock();
-        toast("Gaming Mode enabled. Press Esc to exit.");
-      } catch (error) {
-        toast("This browser blocked pointer lock. Open this stream in Chrome or Edge for mouse look.");
-      }
-    }
+    toast("Gaming Mode requested. Press Esc to exit.");
   }
 
   async function toggleInputMode() {
@@ -325,6 +309,13 @@
   document.addEventListener("pointerlockchange", () => {
     state.pointer = Boolean(document.pointerLockElement);
     button("pointer").classList.toggle("is-active", state.pointer);
+  });
+  window.addEventListener("message", (event) => {
+    if (event.source !== window || event.origin !== window.location.origin) return;
+    if (event.data?.type !== "gamingModeUpdate") return;
+    state.pointer = Boolean(event.data.active);
+    button("pointer").classList.toggle("is-active", state.pointer);
+    if (state.pointer) toast("Gaming Mode active: relative mouse input enabled.");
   });
   document.addEventListener("fullscreenchange", () => button("fullscreen").classList.toggle("is-active", Boolean(document.fullscreenElement)));
   window.addEventListener("keydown", (event) => {

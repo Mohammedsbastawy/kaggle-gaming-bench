@@ -465,14 +465,21 @@ def launch(app, wine):
     wine_bin = wine or shutil.which("wine")
     configure_mouse(wine_bin, env)
 
-    # Unified Dual-Input: Enable both Selkies virtual Xbox 360 gamepads AND
-    # native X11 mouse/keyboard simultaneously. No artificial mode switching.
-    env["SELKIES_JS_SOCKET_PATH"] = ("/tmp/kaggle-game-dev-bench/direct-stream-sockets"
-                                     if direct_xorg else "/tmp")
+    # Expose the virtual controller only in gamepad mode. In mouse mode Wine
+    # otherwise sees an Xbox controller even though the HUD says M+K.
+    input_mode = get_input_mode()
     env["SDL_JOYSTICK_DISABLE_UDEV"] = "1"
-    env["SDL_JOYSTICK_DEVICE"] = "/dev/input/event1000:/dev/input/event1001:/dev/input/event1002:/dev/input/event1003"
-    interposer = "/usr/$LIB/selkies_input_interposer.so:/usr/$LIB/selkies_fake_udev.so"
-    env["LD_PRELOAD"] = (interposer + ":" + env.get("LD_PRELOAD", "")).rstrip(":")
+    if input_mode == "mouse_keyboard":
+        env.pop("SELKIES_JS_SOCKET_PATH", None)
+        env.pop("LD_PRELOAD", None)
+        env["SDL_JOYSTICK_DEVICE"] = ""
+        env["WINEDLLOVERRIDES"] += ";winebus.sys=d"
+    else:
+        env["SELKIES_JS_SOCKET_PATH"] = ("/tmp/kaggle-game-dev-bench/direct-stream-sockets"
+                                         if direct_xorg else "/tmp")
+        env["SDL_JOYSTICK_DEVICE"] = "/dev/input/event1000:/dev/input/event1001:/dev/input/event1002:/dev/input/event1003"
+        interposer = "/usr/$LIB/selkies_input_interposer.so:/usr/$LIB/selkies_fake_udev.so"
+        env["LD_PRELOAD"] = (interposer + ":" + env.get("LD_PRELOAD", "")).rstrip(":")
 
     target_bin = find_game_binary(app)
     is_64bit = True
