@@ -8,7 +8,7 @@
   const value = (input, fallback = 0) => Number.isFinite(Number(input)) ? Number(input) : fallback;
   const format = (number, digits = 0) => value(number).toFixed(digits);
   const state = {
-    expanded: false,
+    expanded: false, qualityInitialized: false,
     rtts: [], audio: true, pointer: false, esc: false, toastTimer: 0,
     hasGamepad: false, inputMode: "mouse_keyboard",
   };
@@ -276,6 +276,15 @@
   });
   window.addEventListener("message", (event) => {
     if (event.source !== window || event.origin !== window.location.origin) return;
+    if (event.data?.type === "serverSettings" && !state.qualityInitialized) {
+      // An earlier HUD saved 45 FPS and 4 Mbps in Selkies' browser storage.
+      // Reset the chosen ceiling once, after the dashboard restores its settings.
+      state.qualityInitialized = true;
+      setTimeout(() => post({ type: "settings", settings: {
+        rate_control_mode: "cbr", video_bitrate: 8000, framerate: 60,
+      } }), 1500);
+      return;
+    }
     if (event.data?.type !== "gamingModeUpdate") return;
     state.pointer = Boolean(event.data.active);
     button("pointer").classList.toggle("is-active", state.pointer);
