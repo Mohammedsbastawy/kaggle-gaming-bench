@@ -8,17 +8,10 @@
   const value = (input, fallback = 0) => Number.isFinite(Number(input)) ? Number(input) : fallback;
   const format = (number, digits = 0) => value(number).toFixed(digits);
   const state = {
-    expanded: false, auto: false, level: 2, lastLost: 0, lastTune: 0,
+    expanded: false,
     rtts: [], audio: true, pointer: false, esc: false, toastTimer: 0,
     hasGamepad: false, inputMode: "mouse_keyboard",
   };
-  const levels = [
-    { bitrate: 2000, width: 854, height: 480, fps: 30, name: "Recovery" },
-    { bitrate: 4000, width: 1024, height: 576, fps: 45, name: "Balanced" },
-    { bitrate: 8000, width: 1280, height: 720, fps: 60, name: "High" },
-    { bitrate: 12000, width: 1280, height: 720, fps: 60, name: "Ultra" },
-    { bitrate: 15000, width: 1280, height: 720, fps: 60, name: "Maximum" },
-  ];
 
   const hud = document.createElement("section");
   hud.id = "seven-bz-hud";
@@ -29,7 +22,7 @@
         <div class="seven-brand"><i class="seven-mark"></i><span class="seven-brand-name">7BZ Dev Cloud Game</span><span class="seven-live">LIVE</span></div>
         <div class="seven-quick">
           <div class="seven-chip"><b data-stat="fps">--</b><span>Stream FPS</span></div>
-          <div class="seven-chip"><b data-stat="rtt">--</b><span>WebSocket RTT</span></div>
+          <div class="seven-chip"><b data-stat="rtt">--</b><span>Stream RTT</span></div>
           <div class="seven-chip"><b data-stat="rate">--</b><span>Video rate</span></div>
           <div class="seven-chip"><b data-stat="pad">None</b><span>Gamepad</span></div>
           <div class="seven-chip"><b data-stat="gpu">--</b><span>GPU (G0|G1)</span></div>
@@ -50,8 +43,8 @@
         </div>
         <div class="seven-card">
           <div class="seven-optimize">
-            <div class="seven-optimize-copy"><b>Adaptive Auto-Optimizer</b><span data-stat="profile">High · 720p · 8 Mbps</span></div>
-            <button class="seven-button" data-action="optimize">Auto-Optimize</button>
+            <div class="seven-optimize-copy"><b>Automatic stream quality</b><span data-stat="profile">720p · 60 FPS · adaptive bitrate</span></div>
+            <span class="seven-live">AUTO</span>
           </div>
           <div class="seven-actions">
             <button class="seven-button" data-action="fullscreen">Fullscreen</button>
@@ -114,10 +107,8 @@
     const mean = state.rtts.reduce((sum, item) => sum + item, 0) / Math.max(1, state.rtts.length);
     const jitter = Math.sqrt(state.rtts.reduce((sum, item) => sum + ((item - mean) ** 2), 0) / Math.max(1, state.rtts.length));
     const lost = value(latest.lost_frames ?? latest.frames_not_shown);
-    const lostDelta = Math.max(0, lost - state.lastLost);
-    state.lastLost = lost;
     return {
-      latest, client, rtt, jitter, lost, lostDelta,
+      latest, client, rtt, jitter, lost,
       fps: value(latest.fps, value(window.fps)),
       rate: value(latest.video_mbps, value(latest.mbps)),
     };
@@ -172,26 +163,6 @@
       ? `${format(latest.packet_loss_percent, 2)}%` : "N/A (WS)");
     checkGamepads();
     syncGpus();
-    if (state.auto) maybeTune(sample);
-  }
-
-  function applyLevel(index, reason) {
-    state.level = Math.max(0, Math.min(levels.length - 1, index));
-    const profile = levels[state.level];
-    post({ type: "settings", settings: { rate_control_mode: "cbr", video_bitrate: profile.bitrate, framerate: profile.fps } });
-    post({ type: "setManualResolution", width: profile.width, height: profile.height });
-    stat("profile", `${profile.name} · ${profile.width}×${profile.height} · ${profile.bitrate / 1000} Mbps`);
-    toast(`${reason}: ${profile.name} at ${profile.bitrate / 1000} Mbps`);
-  }
-
-  function maybeTune(sample) {
-    const now = Date.now();
-    if (now - state.lastTune < 12000) return;
-    state.lastTune = now;
-    const bad = sample.rtt > 145 || sample.jitter > 35 || sample.lostDelta > 0 || (sample.fps > 0 && sample.fps < 42);
-    const excellent = sample.rtt > 0 && sample.rtt < 55 && sample.jitter < 12 && sample.lostDelta === 0 && sample.fps >= 55;
-    if (bad && state.level > 0) applyLevel(state.level - 1, "Connection stabilized");
-    else if (excellent && state.level < levels.length - 1) applyLevel(state.level + 1, "Connection headroom detected");
   }
 
   function toggleExpanded() {
@@ -295,13 +266,6 @@
       post({ type: "setVolume", value: 1 });
       button("audio").classList.add("is-active");
       toast("Audio enabled at full volume.");
-    }
-    if (action === "optimize") {
-      state.auto = !state.auto;
-      button("optimize").classList.toggle("is-active", state.auto);
-      button("optimize").textContent = state.auto ? "Auto: ON" : "Auto-Optimize";
-      if (state.auto) { state.lastTune = 0; applyLevel(state.level, "Auto-Optimizer enabled"); }
-      else toast("Auto-Optimizer paused.");
     }
     if (action === "reset") resetGame();
   });

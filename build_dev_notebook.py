@@ -425,23 +425,26 @@ else:
     env['CUDA_VISIBLE_DEVICES'] = '0'
     env['SELKIES_ENCODER_DEVICE'] = '0'
 
-queue_size = os.environ.get('GAMELAB_WS_QUEUE', '12')
+queue_size = os.environ.get('GAMELAB_WS_QUEUE', '4')
 if not queue_size.isdigit() or not 1 <= int(queue_size) <= 120:
     raise ValueError('GAMELAB_WS_QUEUE must be an integer from 1 to 120')
 env.update(SELKIES_ENABLE_HTTPS='false', SELKIES_MODE='websockets',
            SELKIES_ALLOWED_ORIGINS='https://kkb-production.jupyter-proxy.kaggle.net',
-           SELKIES_ENCODER='h264enc', SELKIES_FRAMERATE='60,30-60',
+           SELKIES_ENCODER='h264enc', SELKIES_FRAMERATE='60-60',
            SELKIES_VIDEO_FULLCOLOR='false|locked',
            SELKIES_VIDEO_10BIT='false|locked',
            SELKIES_BACKPRESSURE_QUEUE_SIZE=queue_size,
-           SELKIES_VIDEO_BITRATE='8000,2000-15000',
-           SELKIES_RATE_CONTROL_MODE='cbr', SELKIES_ENABLE_RESIZE='true',
+           SELKIES_VIDEO_BITRATE='8000,1000-12000',
+           SELKIES_RATE_CONTROL_MODE='cbr', SELKIES_CONGESTION_CONTROL='true',
+           SELKIES_ENABLE_RESIZE='true',
            SELKIES_AUDIO_ENABLED='true', SELKIES_AUDIO_CHANNELS='2',
            SELKIES_AUDIO_BITRATE='128000', SELKIES_GAMEPAD_ENABLED='true',
            SELKIES_UINPUT_GAMEPAD='false',
            SELKIES_JS_SOCKET_PATH='/tmp',
            SELKIES_UI_TITLE='7BZ Dev Cloud Game',
            SELKIES_UI_SHOW_SIDEBAR='true', SELKIES_UI_SHOW_LOGO='false',
+           SELKIES_UI_SIDEBAR_SHOW_VIDEO_SETTINGS='false',
+           SELKIES_UI_SIDEBAR_SHOW_SCREEN_SETTINGS='false',
            SELKIES_MANUAL_WIDTH='1280', SELKIES_MANUAL_HEIGHT='720',
            SELKIES_WEB_ROOT=str(BENCH / 'web-root'),
            FILE_MANAGER_PATH=str(BUILDS),
@@ -793,7 +796,7 @@ report = {
         'video_support': 'Tesla T4 NVENC hardware H.264 4:2:0 encode at 60 FPS'
     },
     'gpu_runtime': gpu_facts,
-    'stream_config': {'codec': 'H.264 4:2:0 8-bit', 'websocket_queue': os.environ.get('GAMELAB_WS_QUEUE', '12')}
+    'stream_config': {'codec': 'H.264 4:2:0 8-bit', 'websocket_queue': os.environ.get('GAMELAB_WS_QUEUE', '4')}
 }
 
 try:

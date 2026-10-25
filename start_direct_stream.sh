@@ -129,11 +129,14 @@ nohup env SELKIES_ENCODER_DEVICE="$ENCODER_DEVICE" SELKIES_ENCODER=h264enc \
     SELKIES_AUDIO_ENABLED=true SELKIES_AUDIO_ON_START=true \
     SELKIES_AUDIO_DEVICE_NAME=output.monitor \
     python3 -m selkies --port="$PORT" --enable-basic-auth=false \
-    --framerate=60,30-60 --video-bitrate=8000,2000-12000 \
+    --framerate=60-60 --video-bitrate=8000,1000-12000 \
+    --rate-control-mode=cbr --congestion-control=true \
     --backpressure-queue-size=4 \
     --command-enabled=false --file-transfers=none --printing-enabled=false \
     --web-root="$BENCH/web-root" --ui-title='7BZ Dev Cloud Game' \
     --ui-show-sidebar=true --ui-show-logo=false \
+    --ui-sidebar-show-video-settings=false \
+    --ui-sidebar-show-screen-settings=false \
     --manual-resolution=true --manual-width="$WIDTH" --manual-height="$HEIGHT" \
     > "$BENCH/logs/direct-stream.log" 2>&1 < /dev/null &
 echo $! > "$BENCH/direct-stream.pid"
