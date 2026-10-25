@@ -43,7 +43,7 @@ runuser -u gamer -- env DISPLAY=:1 HOME=/home/gamer \
   WINEPREFIX=/home/gamer/.wine \
   PULSE_SERVER="$(cat /tmp/kaggle-game-dev-bench/pulse-server-path)" \
   python3 /tmp/kaggle-game-dev-bench/launch_idtech5.py --direct-xorg \
-  --wine /home/gamer/.config/heroic/tools/wine/lutris-GE-Proton8-26-x86_64/bin/wine \
+  --wine /home/gamer/.config/heroic/tools/wine/Wine-GE-Proton8-26/bin/wine \
   /home/gamer/Games/WolfensteinTNO/WolfNewOrder_x64.exe \
   +set com_skipIntroVideo 1 +set com_skipBootSequence 1 \
   +set r_fullscreen 0 +set r_mode -1 \

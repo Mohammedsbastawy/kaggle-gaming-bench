@@ -788,7 +788,7 @@ html = r"""
     <ul style="margin:6px 0 0 16px;padding:0;line-height:1.5">
       <li><b>User state:</b> Storefronts run as <code>gamer</code>; their temporary credentials and caches are under <code>/home/gamer</code>.</li>
       <li><b>Storefront EULA:</b> Valve's Subscriber Agreement is presented to the user directly in the Steam GUI on first launch.</li>
-      <li><b>GPU path:</b> T4 NVENC H.264 streaming and VirtualGL <code>egl0</code> offscreen 3D are verified. DXVK remains capability-gated.</li>
+      <li><b>GPU path:</b> GPU 0 renders the NVIDIA Xorg desktop and games; GPU 1 encodes the primary 8081 stream with NVENC. DXVK remains capability-gated.</li>
       <li><b>Custom Builds:</b> Upload test Linux builds into <code style="color:#4dcdf2">/tmp/game-builds</code> via Selkies Files panel.</li>
     </ul>
   </div>
