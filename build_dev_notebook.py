@@ -76,9 +76,17 @@ probe_sh.chmod(0o755)
 setup_sh.chmod(0o755)
 print('▶ Running automated setup.sh...', flush=True)
 proc = subprocess.Popen(['/bin/bash', str(setup_sh)], stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1)
-for line in proc.stdout:
-    print(line, end='', flush=True)
-proc.wait()
+while True:
+    line = proc.stdout.readline()
+    if line:
+        print(line, end='', flush=True)
+    elif proc.poll() is not None:
+        rest = proc.stdout.read()
+        if rest:
+            print(rest, end='', flush=True)
+        break
+    else:
+        time.sleep(0.05)
 print(f'setup.sh completed with exit code: {proc.returncode}', flush=True)
 
 # 4. Configure unprivileged gamer user

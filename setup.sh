@@ -342,3 +342,5 @@ chmod -R 777 /home/gamer 2>/dev/null || true
 echo "=========================================================="
 echo "    BENCH ENVIRONMENT SETUP COMPLETED SUCCESSFULLY!       "
 echo "=========================================================="
+wineserver -k 2>/dev/null || true
+exit 0
