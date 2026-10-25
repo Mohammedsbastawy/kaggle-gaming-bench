@@ -92,7 +92,8 @@ def game_env() -> Dict[str, str]:
         env["SDL_JOYSTICK_DISABLE_UDEV"] = "1"
         env["WINEDLLOVERRIDES"] = env.get("WINEDLLOVERRIDES", "") + ";winebus.sys=d"
     else:
-        env["SELKIES_JS_SOCKET_PATH"] = "/tmp"
+        env["SELKIES_JS_SOCKET_PATH"] = ("/tmp/kaggle-game-dev-bench/direct-stream-sockets"
+                                         if env.get("GAMELAB_DIRECT_XORG") == "1" else "/tmp")
         env["SDL_JOYSTICK_DISABLE_UDEV"] = "1"
         env["SDL_JOYSTICK_DEVICE"] = "/dev/input/event1000:/dev/input/event1001:/dev/input/event1002:/dev/input/event1003"
         interposer = "/tmp/kaggle-game-dev-bench/$LIB/selkies_input_interposer.so:/tmp/kaggle-game-dev-bench/$LIB/selkies_fake_udev.so"

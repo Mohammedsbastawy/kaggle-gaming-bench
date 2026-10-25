@@ -16,6 +16,7 @@ auto_optimize_code = (root / 'auto_optimize.py').read_text(encoding='utf-8')
 setup_sh_code = (root / 'setup.sh').read_text(encoding='utf-8')
 gpu_runtime_code = (root / 'gpu_runtime.py').read_text(encoding='utf-8')
 launch_idtech5_code = (root / 'launch_idtech5.py').read_text(encoding='utf-8')
+start_direct_stream_code = (root / 'start_direct_stream.sh').read_text(encoding='utf-8')
 bench_runtime_code = (root / 'bench_runtime.py').read_text(encoding='utf-8')
 gpu_xorg_code = (root / 'gpu_xorg.sh').read_text(encoding='utf-8')
 probe_nvidia_userspace_code = (root / 'probe_nvidia_userspace.sh').read_text(encoding='utf-8')
@@ -69,6 +70,7 @@ probe_sh.write_text(''' + repr(probe_nvidia_userspace_code) + r''', encoding='ut
 probe_sh.chmod(0o755)
 (BENCH / 'gpu_runtime.py').write_text(''' + repr(gpu_runtime_code) + r''', encoding='utf-8')
 (BENCH / 'launch_idtech5.py').write_text(''' + repr(launch_idtech5_code) + r''', encoding='utf-8')
+(BENCH / 'start_direct_stream.sh').write_text(''' + repr(start_direct_stream_code) + r''', encoding='utf-8')
 
 # 3. Execute setup.sh with live output streaming
 setup_sh.chmod(0o755)
@@ -305,6 +307,7 @@ fix_heroic_sh = {repr(fix_heroic_sh_code)}
 (BENCH / 'legendary_gui.py').write_text({repr(legendary_gui_code)}, encoding='utf-8')
 (BENCH / 'gpu_runtime.py').write_text({repr(gpu_runtime_code)}, encoding='utf-8')
 (BENCH / 'launch_idtech5.py').write_text({repr(launch_idtech5_code)}, encoding='utf-8')
+(BENCH / 'start_direct_stream.sh').write_text({repr(start_direct_stream_code)}, encoding='utf-8')
 (BENCH / 'bench_runtime.py').write_text({repr(bench_runtime_code)}, encoding='utf-8')
 (BENCH / 'gpu_xorg.sh').write_text({repr(gpu_xorg_code)}, encoding='utf-8')
 (BENCH / 'probe_nvidia_userspace.sh').write_text({repr(probe_nvidia_userspace_code)}, encoding='utf-8')
@@ -737,11 +740,25 @@ Path('/kaggle/working/game_dev_bench_health.json').write_text(json.dumps(report,
 print('================== HEALTH & DIAGNOSTIC REPORT ==================')
 print(json.dumps(report, indent=2))
 print('================================================================')
+preferred_port = '8080'
+direct_script = BENCH / 'start_direct_stream.sh'
+if direct_script.is_file() and (BENCH / 'gpu-xorg-ready').exists():
+    direct = subprocess.run(['bash', str(direct_script)], capture_output=True,
+                            text=True, timeout=30)
+    if direct.returncode == 0:
+        preferred_port = '8081'
+        print('Direct NVIDIA desktop ready on port 8081.', flush=True)
+    else:
+        print('Direct NVIDIA desktop unavailable:', (direct.stdout + direct.stderr)[-700:], flush=True)
+(BENCH / 'preferred-stream-port').write_text(preferred_port, encoding='utf-8')
 print('7BZ Dev Cloud Game is running in the active session.')
 '''
 
 link_script = r'''from IPython.display import display, HTML
-display(HTML(r"""
+from pathlib import Path
+port_file = Path('/tmp/kaggle-game-dev-bench/preferred-stream-port')
+stream_port = port_file.read_text().strip() if port_file.is_file() else '8080'
+html = r"""
 <div style="font:16px system-ui, -apple-system, sans-serif;padding:24px;border-radius:16px;background:#0d1729;color:#f4f8ff;max-width:760px;box-shadow:0 8px 24px rgba(0,0,0,0.5)">
   <h2 style="margin-top:0;color:#4dcdf2;display:flex;align-items:center;gap:10px">
     <span>🎮</span> 7BZ Dev Cloud Game
@@ -784,7 +801,7 @@ document.getElementById('kaggle-open').onclick = function () {
     const u = new URL(raw);
     let p = u.pathname.replace(/\/(tree|lab|notebooks)(\/.*)?$/, '/');
     if (!p.endsWith('/')) p += '/';
-    u.pathname = p + 'proxy/8080/';
+    u.pathname = p + 'proxy/__STREAM_PORT__/';
     const target = u.toString();
     document.getElementById('kaggle-result').textContent = 'Opening authenticated Jupyter proxy route...';
     window.open(target, '_blank', 'noopener,noreferrer');
@@ -793,7 +810,8 @@ document.getElementById('kaggle-open').onclick = function () {
   }
 };
 </script>
-"""))
+"""
+display(HTML(html.replace('__STREAM_PORT__', stream_port)))
 '''
 
 cells = [
@@ -820,12 +838,13 @@ cells = [
             '\n',
             '### Hardware Reality & Constraints\n',
             '- **NVENC Hardware Acceleration**: Encoding is hardware-accelerated on Tesla T4 via NVENC.\n',
-            '- **Desktop 3D Rendering**: Verified NVIDIA offscreen rendering through VirtualGL `egl0`; Vulkan/DXVK remains enabled only when its complete runtime probe passes.\n',
+            '- **Desktop 3D Rendering**: VirtualGL `egl0` passes native Linux probes. For Wolfenstein, the verified Wine OpenGL path is direct NVIDIA Xorg `:1` with its own Selkies stream on port `8081`. Vulkan/DXVK remains capability-gated.\n',
             '\n',
             '### Instructions\n',
             '1. Set **Accelerator: GPU T4 x2** and **Internet: On** in the Kaggle sidebar.\n',
             '2. Run all cells in an active interactive session.\n',
-            '3. Copy the **VSCode Compatible URL** from **Run → Kaggle Jupyter Server**, paste it into the connection cell, and connect!\n'
+            '3. Copy the **VSCode Compatible URL** from **Run → Kaggle Jupyter Server**, paste it into the connection cell, and connect!\n',
+            '4. The connection cell opens the direct NVIDIA desktop on port `8081` when available. Openbox, Legendary, and games share that display. The Xvfb desktop on port `8080` remains a fallback.\n'
         ]
     },
     {'cell_type': 'code', 'execution_count': None, 'metadata': {}, 'outputs': [], 'source': install_script.splitlines(keepends=True)},

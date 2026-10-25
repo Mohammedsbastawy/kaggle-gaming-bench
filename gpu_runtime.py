@@ -409,6 +409,9 @@ def select_graphics_backend(facts, preference="auto", is_64bit=True):
 def launch(app, wine):
     facts = diagnose()
     env = clean_env()
+    direct_xorg = (env.get("DISPLAY", "").split(".", 1)[0] == ":1" and
+                   facts["direct_gl"] and
+                   os.environ.get("GAMELAB_DIRECT_XORG") == "1")
     env["WINEPREFIX"] = os.environ.get("WINEPREFIX", "/home/gamer/.wine")
     env["WINEDLLOVERRIDES"] = "d3d11,dxgi,d3d9,d3d10core=b;mscoree,mshtml=d"
     env["SDL_AUDIODRIVER"] = "pulse"
@@ -418,7 +421,8 @@ def launch(app, wine):
     # Dedicate GPU 0 exclusively to 3D rendering and physics simulation
     env["CUDA_VISIBLE_DEVICES"] = "0"
     env["DRI_PRIME"] = "0"
-    env["VGL_DISPLAY"] = "egl0"
+    if not direct_xorg:
+        env["VGL_DISPLAY"] = "egl0"
     env["DXVK_FILTER_DEVICE_NAME"] = "Tesla T4"
     env["WINE_FULLSCREEN_FSR"] = "1"
     env["WINE_FULLSCREEN_FSR_STRENGTH"] = "2"
@@ -426,10 +430,11 @@ def launch(app, wine):
     env["VKD3D_FEATURE_LEVEL"] = "12_1"
 
     # Guarantee full OpenGL 4.5 Compatibility Profile & WGL extensions for Wine/idTech
-    env["MESA_GL_VERSION_OVERRIDE"] = "4.5COMPAT"
-    env["MESA_GLSL_VERSION_OVERRIDE"] = "450"
-    env["__NV_PRIME_RENDER_OFFLOAD"] = "1"
-    env["__GLX_VENDOR_LIBRARY_NAME"] = "nvidia"
+    if not direct_xorg:
+        env["MESA_GL_VERSION_OVERRIDE"] = "4.5COMPAT"
+        env["MESA_GLSL_VERSION_OVERRIDE"] = "450"
+        env["__NV_PRIME_RENDER_OFFLOAD"] = "1"
+        env["__GLX_VENDOR_LIBRARY_NAME"] = "nvidia"
     if not env.get("DISPLAY"):
         env["DISPLAY"] = ":0"
 
@@ -471,7 +476,8 @@ def launch(app, wine):
         env["WINEDLLOVERRIDES"] = env.get("WINEDLLOVERRIDES", "") + ";winebus.sys=d"
     else:
         # Gamepad Mode: Bind Xbox 360 controller sockets via interposers
-        env["SELKIES_JS_SOCKET_PATH"] = "/tmp"
+        env["SELKIES_JS_SOCKET_PATH"] = ("/tmp/kaggle-game-dev-bench/direct-stream-sockets"
+                                         if direct_xorg else "/tmp")
         env["SDL_JOYSTICK_DISABLE_UDEV"] = "1"
         env["SDL_JOYSTICK_DEVICE"] = "/dev/input/event1000:/dev/input/event1001:/dev/input/event1002:/dev/input/event1003"
         interposer = "/tmp/kaggle-game-dev-bench/$LIB/selkies_input_interposer.so:/tmp/kaggle-game-dev-bench/$LIB/selkies_fake_udev.so"
@@ -490,7 +496,8 @@ def launch(app, wine):
             wine_bin = str(wine64_candidate)
 
     vgl = shutil.which("vglrun") or "/opt/VirtualGL/bin/vglrun"
-    vgl_ready = Path(vgl).is_file() and (facts.get("virtualgl") or facts.get("egl_device"))
+    vgl_ready = (not direct_xorg and Path(vgl).is_file() and
+                 (facts.get("virtualgl") or facts.get("egl_device")))
     vgl_display = facts.get("virtualgl_display") or facts.get("egl_device_display") or "egl0"
 
     # vglrun enables its dlopen interposer by default.  -dl is not a valid
@@ -516,7 +523,9 @@ def launch(app, wine):
         print(f"Target game binary detected: {target_bin}", flush=True)
         command = [wine_bin, str(target_bin)]
     else:
-        command = ["legendary", "launch", app, "--wine", wine, "--wrapper", str(wrap_script)]
+        command = ["legendary", "launch", app, "--wine", wine]
+        if vgl_ready:
+            command.extend(["--wrapper", str(wrap_script)])
 
     # Prepend vglrun so the process tree inherits its OpenGL interposers.
     if vgl_ready:

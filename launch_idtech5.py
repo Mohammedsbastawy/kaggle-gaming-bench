@@ -31,6 +31,8 @@ def main():
                         help="Path to Wine-GE's bin/wine or bin/wine64")
     parser.add_argument("--vgl-display", default="auto",
                         help="VirtualGL target: auto, :1, or egl0 (default: auto)")
+    parser.add_argument("--direct-xorg", action="store_true",
+                        help="Run directly on the NVIDIA Xorg display :1 (use its Selkies stream)")
     parser.add_argument("--egl-device", default=None,
                         help="Deprecated alias for --vgl-display")
     parser.add_argument("--prefix", type=Path,
@@ -40,11 +42,11 @@ def main():
 
     game = args.game.resolve()
     wine = args.wine.resolve()
-    if not game.is_file() or not wine.is_file() or not VGL.is_file():
-        parser.error("game, Wine binary, and /opt/VirtualGL/bin/vglrun must exist")
+    if not game.is_file() or not wine.is_file() or (not args.direct_xorg and not VGL.is_file()):
+        parser.error("game, Wine binary, and selected graphics launcher must exist")
 
     env = os.environ.copy()
-    env["DISPLAY"] = env.get("DISPLAY") or ":0"
+    env["DISPLAY"] = ":1" if args.direct_xorg else (env.get("DISPLAY") or ":0")
     env["WINEPREFIX"] = str(args.prefix)
     env["VGL_COMPRESS"] = "proxy"
     env["SDL_AUDIODRIVER"] = "pulse"
@@ -56,6 +58,38 @@ def main():
                 "MESA_GLSL_VERSION_OVERRIDE", "__NV_PRIME_RENDER_OFFLOAD",
                 "__GLX_VENDOR_LIBRARY_NAME"):
         env.pop(key, None)
+
+    if args.direct_xorg:
+        # A direct GLX context and the captured window must live on the same
+        # NVIDIA X server. VirtualGL's cross-server drawable mapping is not
+        # reliable for this game's multi-context WGL path.
+        env.pop("VGL_DISPLAY", None)
+        for key in ("VGL_SYNC", "VGL_READBACK", "VGL_LOGO", "VGL_PROFILE"):
+            env.pop(key, None)
+        socket_dir = Path("/tmp/kaggle-game-dev-bench/direct-stream-sockets")
+        input_hook = Path("/tmp/kaggle-game-dev-bench/lib64/selkies_input_interposer.so")
+        if socket_dir.is_dir() and input_hook.is_file():
+            env["SELKIES_JS_SOCKET_PATH"] = str(socket_dir)
+            env["LD_PRELOAD"] = (str(input_hook) + ":" + env.get("LD_PRELOAD", "")).rstrip(":")
+            env["SDL_JOYSTICK_DISABLE_UDEV"] = "1"
+        try:
+            rc, info = probe(["glxinfo", "-B"], env)
+            if rc or not re.search(r"OpenGL vendor string:\s*NVIDIA", info):
+                raise RuntimeError("NVIDIA GLX is unavailable on :1: " + info[-500:])
+        except (OSError, subprocess.TimeoutExpired, RuntimeError) as exc:
+            print(f"Graphics prerequisite failed: {exc}", file=sys.stderr)
+            return 78
+        wine_bin = wine.with_name("wine64") if wine.with_name("wine64").is_file() else wine
+        command = [str(wine_bin), str(game)]
+        command.extend(args.game_args or
+                       ["+set", "com_skipIntroVideo", "1",
+                        "+set", "com_skipBootSequence", "1",
+                        "+set", "r_fullscreen", "0", "+set", "r_mode", "-1",
+                        "+set", "r_windowedWidth", "1280",
+                        "+set", "r_windowedHeight", "720"])
+        print("OpenGL target: direct NVIDIA Xorg :1", flush=True)
+        print("Stream this display using start_direct_stream.sh", flush=True)
+        return subprocess.call(command, cwd=game.parent, env=env)
 
     try:
         rc, extensions = probe(["xdpyinfo", "-queryExtensions"], env)

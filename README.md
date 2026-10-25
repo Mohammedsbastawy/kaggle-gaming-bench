@@ -1,6 +1,6 @@
 # 7BZ Dev Cloud Game
 
-A controller-first cloud gaming and game-development console running on Kaggle with a Tesla T4, Selkies 2.1.0 streaming, and unified storefront integration. The verified live path uses T4 NVENC for H.264 streaming and VirtualGL's headless `egl0` device for offscreen NVIDIA 3D rendering.
+A controller-first cloud gaming and game-development console running on Kaggle with dual Tesla T4 GPUs, Selkies 2.1.0 streaming, and unified storefront integration. The verified Wolfenstein path renders directly on GPU 0's NVIDIA Xorg display and streams that desktop with GPU 1's NVENC encoder.
 
 [![Kaggle Notebook](https://img.shields.io/badge/Kaggle-Interactive%20GPU%20Bench-20BEFF?logo=kaggle)](https://www.kaggle.com/code/mohammedbastawy/interactive-gpu-game-development-bench-20261023)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
@@ -12,9 +12,11 @@ A controller-first cloud gaming and game-development console running on Kaggle w
 ```text
 Browser: 7BZ glass HUD + WebCodecs H.264 + Opus + Gamepad API
     ↕ WSS / HTTPS
-Kaggle Jupyter Server Proxy (/proxy/8080/)
+Kaggle Jupyter Server Proxy (/proxy/8081/ when direct Xorg is ready)
     ↕ localhost
 Selkies 2.1.0 (Tesla T4 NVENC hardware H.264 60 FPS + PulseAudio Opus)
+    ↕
+NVIDIA Xorg :1 (GPU 0 renders desktop and games)
     ↕
 7BZ console dashboard + Openbox window management
     ↕
@@ -23,7 +25,7 @@ Card game library and storefront switcher (`dev_launcher.py`)
 Unprivileged User `gamer` (UID 1000):
     ├── Steam Native (Valve 32/64-bit client)
     ├── Heroic Games Launcher (Epic Games & GOG GUI)
-    ├── Legendary game catalog (VirtualGL egl0 + Wine-GE)
+    ├── Legendary game catalog (direct NVIDIA Xorg + Wine-GE)
     ├── Minigalaxy (DRM-free GOG GTK client)
     ├── Lutris Gaming Hub (Python 3.12 runner)
     └── EA App (Wine64 runner)
@@ -33,23 +35,14 @@ Unprivileged User `gamer` (UID 1000):
 
 ## Quickstart in Kaggle Notebook
 
-To import and launch the bench directly from this repository:
-
-```python
-import subprocess, os
-from pathlib import Path
-
-BENCH = Path('/tmp/kaggle-game-dev-bench')
-REPO = 'https://github.com/Mohammedsbastawy/kaggle-gaming-bench.git'
-
-if not (BENCH / 'setup.sh').exists():
-    subprocess.run(['git', 'clone', REPO, str(BENCH)], check=True)
-
-# Run resilient bootstrap setup
-subprocess.run(['bash', str(BENCH / 'setup.sh')], check=True)
-```
-
-Then start the Selkies session using the provided starter.
+Open [`kaggle_game_dev_bench.ipynb`](kaggle_game_dev_bench.ipynb) in Kaggle with
+T4 x2 acceleration and Internet enabled, then run all cells. The notebook
+contains its own setup scripts, launcher updates, and web client. It starts
+the NVIDIA Xorg desktop on port 8081 automatically when supported and offers
+that stream as the primary link. The link cell asks for Kaggle's current
+VSCode Compatible URL to build the authenticated proxy URL; no shell commands
+are needed. The direct stream serves the full 7BZ top HUD, and Wolfenstein
+opens borderless across 1280×720.
 
 ---
 
@@ -67,8 +60,8 @@ Then start the Selkies session using the provided starter.
 
 ## Hardware Reality & Constraints
 
-* **NVENC 60 FPS Streaming**: Tesla T4 hardware encoder captures Xvfb at 1280×720 @ 60 FPS over WebSockets.
-* **Desktop 3D Graphics**: Live testing verified NVIDIA offscreen OpenGL through `/opt/VirtualGL/bin/vglrun -d egl0`. The dashboard probes this path before each Epic game launch and keeps the Xvfb desktop as the Selkies capture surface.
+* **NVENC 60 FPS Streaming**: GPU 1 encodes the NVIDIA Xorg desktop at 1280×720 over WebSockets.
+* **Desktop 3D Graphics**: GPU 0 renders Wine OpenGL directly on that same Xorg display. Clicking Play in Legendary was verified through a live Wolfenstein 3D scene. Native VirtualGL `egl0` probes succeed, but this game rendered black through that path.
 * **Compatibility**: Vulkan and DXVK remain capability-gated. Games use the verified OpenGL/Wine path when Vulkan presentation is unavailable. `GAMELAB_ALLOW_SOFTWARE=1` remains an explicit fallback for lightweight titles.
 * **Controller Support**: 4 virtual Xbox 360 controllers enumerated via Selkies input interposer without `/dev/uinput`.
 
@@ -87,7 +80,7 @@ docker run --gpus all \
 
 The host must have matching NVIDIA 64-bit and 32-bit graphics libraries. Keep its NVIDIA kernel driver and container libraries on the **same driver version**. The repository's `setup.sh` installs Xorg, VirtualGL 3.1.5 (both bitnesses), and DXVK 2.6.2 only when the relevant NVIDIA devices or ICD are present. The downloaded packages are SHA-256 checked. It does **not** install a second NVIDIA kernel driver or create a fake Vulkan ICD.
 
-`start_desktop.sh` keeps Selkies on Xvfb and starts an optional NVIDIA Xorg on `:1` when display devices are mounted. VirtualGL first tests its headless EGL device path (`egl0`), then the Xorg path, accepting either only when `glxinfo` reports an NVIDIA renderer. The headless Xorg config uses `AllowEmptyInitialConfiguration` and `UseDisplayDevice none`; `gpu_xorg.sh` logs failures in `/tmp/kaggle-game-dev-bench/logs/gpu-xorg.log`. VirtualGL transfers OpenGL frames from the GPU X server into the Xvfb desktop that Selkies captures. `gpu_runtime.py` checks the live OpenGL renderer and NVIDIA Vulkan device plus an actual X11 Vulkan swapchain. It installs both DXVK DLL bitnesses into the Wine prefix with backups only when the Vulkan check passes; otherwise it uses GPU WineD3D if available. The Legendary GUI and terminal menu call this wrapper automatically. Heroic enables its DXVK setting only when the same Vulkan check passes.
+`start_desktop.sh` starts the legacy Xvfb service and NVIDIA Xorg `:1`. `start_direct_stream.sh` then streams `:1` on port 8081 and starts Openbox, the dashboard, and Legendary there. The notebook chooses that one primary link when Xorg is ready; Xvfb on 8080 remains a fallback and supplies PulseAudio in the current setup. `gpu_runtime.py` checks the live OpenGL renderer and NVIDIA Vulkan device plus an actual X11 Vulkan swapchain. On `:1`, it runs directly without VirtualGL. DXVK remains gated by its Vulkan checks. See [Wolfenstein's verified launch path](IDTECH5_OPENGL.md).
 
 From a running desktop terminal, check the result as user `gamer`:
 

@@ -1,5 +1,69 @@
 # id Tech 5 OpenGL on the Kaggle dual-T4 desktop
 
+## Verified working path (2026-10-25)
+
+Wolfenstein: The New Order rendered a live 3D cockpit scene through Selkies
+when Wine ran **directly on NVIDIA Xorg `:1`**. `ffmpeg -f x11grab -i :1`
+captured the same scene. GPU 0 handled the game; Selkies used GPU 1's NVENC
+encoder (the live log reported `NVENC H264` and `nvidia-smi` showed encoder
+activity on GPU 1). This supersedes the VirtualGL backend hypothesis below
+for this title. Native `glxspheres64` still works through VirtualGL, but this
+game gave a black Xvfb window through `egl0`; its `:1` VirtualGL attempt hit
+`GLXBadDrawable`. The precise failing VirtualGL call remains unproven.
+
+The working path uses one NVIDIA X server for both Wine's WGL/GLX window and
+Selkies capture. Running all notebook cells starts the legacy PulseAudio service,
+the NVIDIA Xorg server, and the direct stream automatically. The script is also
+available for recovery in an existing session:
+
+```bash
+bash /tmp/kaggle-game-dev-bench/start_direct_stream.sh
+```
+
+The notebook now starts Openbox, the dashboard, and Legendary on `:1` and
+opens **port `8081` as the primary desktop** when NVIDIA Xorg is ready. Its
+Play button launches this game on the same display, so no stream switching is
+needed. The direct stream holds `1280x720`; client-driven resizing to an
+unsupported `928x884` mode collapsed the game's window. The old `8080` Xvfb
+service remains running internally as a fallback and currently supplies the
+PulseAudio session. It is not needed for normal play through the primary link.
+Port `8081` serves the same custom Selkies web root and 7BZ top HUD as `8080`.
+Openbox applies a Wolfenstein-specific fullscreen rule, so its window covers
+the entire 1280×720 display without a title bar or visible tint2 panel.
+
+In the live session, clicking Play in the `:0` Legendary GUI failed with
+`GLXBadDrawable` and exit status 1. That GUI inherited `DISPLAY=:0` and used
+the VirtualGL path. The working `:1` GUI passed `--direct-xorg`; the same
+click launched the game through its menu and into a 3D cockpit scene.
+
+Launch this OpenGL title as `gamer` directly on `:1`:
+
+```bash
+runuser -u gamer -- env DISPLAY=:1 HOME=/home/gamer \
+  WINEPREFIX=/home/gamer/.wine \
+  PULSE_SERVER="$(cat /tmp/kaggle-game-dev-bench/pulse-server-path)" \
+  python3 /tmp/kaggle-game-dev-bench/launch_idtech5.py --direct-xorg \
+  --wine /home/gamer/.config/heroic/tools/wine/lutris-GE-Proton8-26-x86_64/bin/wine \
+  /home/gamer/Games/WolfensteinTNO/WolfNewOrder_x64.exe \
+  +set com_skipIntroVideo 1 +set com_skipBootSequence 1 \
+  +set r_fullscreen 0 +set r_mode -1 \
+  +set r_windowedWidth 1280 +set r_windowedHeight 720
+```
+
+The direct Selkies server currently runs as root: its `gamer` instance could
+connect and encode but Xorg rejected its MIT-SHM attach with `BadAccess`.
+The script disables browser command execution and file transfers on this
+privileged stream. Keyboard input and live video were verified; gamepad input
+on the direct stream still needs an end-to-end test.
+
+Confirm a 3D frame from the actual capture display:
+
+```bash
+DISPLAY=:1 XAUTHORITY=/tmp/kaggle-game-dev-bench/nvidia-Xauthority \
+  ffmpeg -loglevel error -f x11grab -video_size 1280x720 -i :1 \
+  -frames:v 1 -y /tmp/screen_verify_3d.png
+```
+
 ## What the live Kaggle session showed
 
 The original WGL failure was resolved: captured Xvfb `:0` now advertises GLX.

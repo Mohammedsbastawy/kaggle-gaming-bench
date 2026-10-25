@@ -416,12 +416,16 @@ class LegendaryApp(tk.Tk):
         env["DISPLAY"] = os.environ.get("DISPLAY", ":0")
         env["HOME"] = str(HOME)
         env["WINEPREFIX"] = str(HOME / ".wine")
-        env["MESA_GL_VERSION_OVERRIDE"] = "4.5COMPAT"
-        env["MESA_GLSL_VERSION_OVERRIDE"] = "450"
         env["CUDA_VISIBLE_DEVICES"] = "0"
-        env["VGL_DISPLAY"] = "egl0"
-        env["__NV_PRIME_RENDER_OFFLOAD"] = "1"
-        env["__GLX_VENDOR_LIBRARY_NAME"] = "nvidia"
+        direct_xorg = (env["DISPLAY"].split(".", 1)[0] == ":1" and
+                       (BENCH / "gpu-xorg-ready").exists())
+        if direct_xorg:
+            env["GAMELAB_DIRECT_XORG"] = "1"
+            for key in ("VGL_DISPLAY", "MESA_GL_VERSION_OVERRIDE",
+                        "MESA_GLSL_VERSION_OVERRIDE", "__NV_PRIME_RENDER_OFFLOAD"):
+                env.pop(key, None)
+        else:
+            env["VGL_DISPLAY"] = "egl0"
 
         # Automatically verify and heal Wine prefix before launch if kernel32.dll is missing
         kernel32 = HOME / ".wine/drive_c/windows/system32/kernel32.dll"
@@ -441,6 +445,7 @@ class LegendaryApp(tk.Tk):
         game_binary = find_game_binary(app_name)
         if game_binary and game_binary.name.lower() == "wolfneworder_x64.exe":
             cmd = ["python3", "/tmp/kaggle-game-dev-bench/launch_idtech5.py",
+                   *(["--direct-xorg"] if direct_xorg else []),
                    "--wine", runner, str(game_binary)]
         else:
             cmd = ["python3", "/tmp/kaggle-game-dev-bench/gpu_runtime.py",
