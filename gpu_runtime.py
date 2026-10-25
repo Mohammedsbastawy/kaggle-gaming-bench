@@ -521,7 +521,22 @@ def launch(app, wine):
 
     if target_bin and wine_bin:
         print(f"Target game binary detected: {target_bin}", flush=True)
+        try:
+            configure_mouse(str(wine_bin), env)
+        except Exception:
+            pass
         command = [wine_bin, str(target_bin)]
+        if "wolf" in target_bin.name.lower() or "idtech" in target_bin.name.lower():
+            command.extend([
+                "+set", "com_skipIntroVideo", "1",
+                "+set", "com_skipBootSequence", "1",
+                "+set", "r_fullscreen", "0",
+                "+set", "r_mode", "-1",
+                "+set", "r_windowedWidth", "1280",
+                "+set", "r_windowedHeight", "720",
+                "+set", "vt_cuda", "0",
+                "+set", "vt_maxPPF", "16"
+            ])
     else:
         command = ["legendary", "launch", app, "--wine", wine]
         if vgl_ready:

@@ -3,7 +3,7 @@
 # ordinary desktop session has created PulseAudio and gpu_xorg.sh has run.
 set -euo pipefail
 BENCH=/tmp/kaggle-game-dev-bench
-PORT="${DIRECT_STREAM_PORT:-8081}"
+PORT="${DIRECT_STREAM_PORT:-8080}"
 WIDTH="${DIRECT_STREAM_WIDTH:-1280}"
 HEIGHT="${DIRECT_STREAM_HEIGHT:-720}"
 ORIGIN="${SELKIES_ALLOWED_ORIGINS:-https://kkb-production.jupyter-proxy.kaggle.net}"
@@ -19,6 +19,30 @@ if command -v xrandr >/dev/null; then
     DISPLAY=:1 XAUTHORITY="$BENCH/nvidia-Xauthority" \
         xrandr --output DVI-D-0 --mode "${WIDTH}x${HEIGHT}"
 fi
+
+# Ensure independent PulseAudio daemon is running
+mkdir -p /home/gamer/.config/pulse /run/user/1000/pulse /tmp/pulse 2>/dev/null || true
+chmod 777 /run/user/1000 /run/user/1000/pulse /tmp/pulse 2>/dev/null || true
+
+if ! pgrep -u gamer -x pulseaudio >/dev/null 2>&1 && ! pgrep -u root -x pulseaudio >/dev/null 2>&1; then
+    runuser -u gamer -- pulseaudio --daemonize=yes --exit-idle-time=-1 --disallow-exit=yes 2>/dev/null || \
+    pulseaudio --system --daemonize=yes --disallow-exit=yes 2>/dev/null || true
+fi
+
+PULSE_SOCK=""
+for s in /run/user/1000/pulse/native /tmp/pulse-*/native /run/user/0/pulse/native; do
+    if [ -S "$s" ]; then
+        chmod 666 "$s" 2>/dev/null || true
+        PULSE_SOCK="unix:$s"
+        break
+    fi
+done
+
+if [ -n "$PULSE_SOCK" ]; then
+    echo "$PULSE_SOCK" > "$BENCH/pulse-server-path"
+    chmod 666 "$BENCH/pulse-server-path" 2>/dev/null || true
+fi
+
 PULSE_SERVER="$(cat "$BENCH/pulse-server-path" 2>/dev/null || true)"
 export DISPLAY=:1 XAUTHORITY="$BENCH/nvidia-Xauthority" PULSE_SERVER
 ENCODER_DEVICE=0

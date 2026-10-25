@@ -461,18 +461,21 @@ try:
 except Exception:
     pass
 
-log = (BENCH / 'selkies.log').open('a', buffering=1)
-server = subprocess.Popen(['selkies-session', '--session=' + str(wrapper),
-                           '--port=8080', '--enable-basic-auth=false'],
-                          stdout=log, stderr=subprocess.STDOUT,
-                          stdin=subprocess.DEVNULL, env=env,
-                          start_new_session=True)
-pidfile.write_text(str(server.pid))
+# Launch unified direct NVIDIA gaming desktop on port 8080
+direct_script = BENCH / 'start_direct_stream.sh'
+print('▶ Starting unified direct NVIDIA gaming desktop on port 8080...', flush=True)
+direct_res = subprocess.run(['bash', str(direct_script)],
+                            env=dict(os.environ, DIRECT_STREAM_PORT='8080'),
+                            capture_output=True, text=True)
+if direct_res.returncode != 0:
+    print('Direct stream startup message:', direct_res.stdout + direct_res.stderr, flush=True)
+
+server_pid = (BENCH / 'direct-stream.pid').read_text().strip() if (BENCH / 'direct-stream.pid').exists() else None
+if server_pid:
+    pidfile.write_text(server_pid)
 
 health = None
 for _ in range(75):
-    if server.poll() is not None:
-        break
     try:
         with urllib.request.urlopen('http://127.0.0.1:8080/api/health', timeout=2) as response:
             if response.status == 200:
@@ -482,8 +485,9 @@ for _ in range(75):
         time.sleep(1)
 
 if health != 'OK':
-    raise RuntimeError('Selkies did not start. Log tail:\n' +
-                       (BENCH / 'selkies.log').read_text(errors='replace')[-5000:])
+    stream_log = (BENCH / 'logs' / 'direct-stream.log').read_text(errors='replace')[-3000:] if (BENCH / 'logs' / 'direct-stream.log').exists() else ''
+    xorg_log = (BENCH / 'logs' / 'gpu-xorg.log').read_text(errors='replace')[-2000:] if (BENCH / 'logs' / 'gpu-xorg.log').exists() else ''
+    raise RuntimeError(f'Direct NVIDIA desktop did not start. Log tail:\n{stream_log}\nXorg:\n{xorg_log}')
 
 with urllib.request.urlopen('http://127.0.0.1:8080/api/status', timeout=5) as response:
     status = json.load(response)
@@ -741,16 +745,8 @@ print('================== HEALTH & DIAGNOSTIC REPORT ==================')
 print(json.dumps(report, indent=2))
 print('================================================================')
 preferred_port = '8080'
-direct_script = BENCH / 'start_direct_stream.sh'
-if direct_script.is_file() and (BENCH / 'gpu-xorg-ready').exists():
-    direct = subprocess.run(['bash', str(direct_script)], capture_output=True,
-                            text=True, timeout=30)
-    if direct.returncode == 0:
-        preferred_port = '8081'
-        print('Direct NVIDIA desktop ready on port 8081.', flush=True)
-    else:
-        print('Direct NVIDIA desktop unavailable:', (direct.stdout + direct.stderr)[-700:], flush=True)
 (BENCH / 'preferred-stream-port').write_text(preferred_port, encoding='utf-8')
+print('Unified direct NVIDIA desktop ready on port 8080.', flush=True)
 print('7BZ Dev Cloud Game is running in the active session.')
 '''
 
@@ -789,7 +785,7 @@ html = r"""
     <ul style="margin:6px 0 0 16px;padding:0;line-height:1.5">
       <li><b>User state:</b> Storefronts run as <code>gamer</code>; their temporary credentials and caches are under <code>/home/gamer</code>.</li>
       <li><b>Storefront EULA:</b> Valve's Subscriber Agreement is presented to the user directly in the Steam GUI on first launch.</li>
-      <li><b>GPU path:</b> GPU 0 renders the NVIDIA Xorg desktop and games; GPU 1 encodes the primary 8081 stream with NVENC. DXVK remains capability-gated.</li>
+      <li><b>GPU path:</b> GPU 0 renders the direct NVIDIA Xorg desktop and games; GPU 1 encodes the unified 8080 stream with NVENC.</li>
       <li><b>Custom Builds:</b> Upload test Linux builds into <code style="color:#4dcdf2">/tmp/game-builds</code> via Selkies Files panel.</li>
     </ul>
   </div>
@@ -839,13 +835,13 @@ cells = [
             '\n',
             '### Hardware Reality & Constraints\n',
             '- **NVENC Hardware Acceleration**: Encoding is hardware-accelerated on Tesla T4 via NVENC.\n',
-            '- **Desktop 3D Rendering**: VirtualGL `egl0` passes native Linux probes. For Wolfenstein, the verified Wine OpenGL path is direct NVIDIA Xorg `:1` with its own Selkies stream on port `8081`. Vulkan/DXVK remains capability-gated.\n',
+            '- **Desktop 3D Rendering**: The verified Wine OpenGL path is direct NVIDIA Xorg `:1` streamed on port `8080`. GPU 0 handles direct hardware 3D rendering and GPU 1 encodes with NVENC.\n',
             '\n',
             '### Instructions\n',
             '1. Set **Accelerator: GPU T4 x2** and **Internet: On** in the Kaggle sidebar.\n',
             '2. Run all cells in an active interactive session.\n',
             '3. Copy the **VSCode Compatible URL** from **Run → Kaggle Jupyter Server**, paste it into the connection cell, and connect!\n',
-            '4. The connection cell opens the direct NVIDIA desktop on port `8081` when available. Openbox, Legendary, and games share that display. The Xvfb desktop on port `8080` remains a fallback.\n'
+            '4. The connection cell opens the direct NVIDIA desktop on port `8080`. Openbox, Legendary, and games share that display directly.\n'
         ]
     },
     {'cell_type': 'code', 'execution_count': None, 'metadata': {}, 'outputs': [], 'source': install_script.splitlines(keepends=True)},

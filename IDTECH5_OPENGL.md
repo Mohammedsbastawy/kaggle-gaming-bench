@@ -20,14 +20,12 @@ available for recovery in an existing session:
 bash /tmp/kaggle-game-dev-bench/start_direct_stream.sh
 ```
 
-The notebook now starts Openbox, the dashboard, and Legendary on `:1` and
-opens **port `8081` as the primary desktop** when NVIDIA Xorg is ready. Its
+The notebook starts Openbox, the dashboard, and Legendary directly on `:1` and
+opens **port `8080` as the primary unified desktop**. Its
 Play button launches this game on the same display, so no stream switching is
 needed. The direct stream holds `1280x720`; client-driven resizing to an
-unsupported `928x884` mode collapsed the game's window. The old `8080` Xvfb
-service remains running internally as a fallback and currently supplies the
-PulseAudio session. It is not needed for normal play through the primary link.
-Port `8081` serves the same custom Selkies web root and 7BZ top HUD as `8080`.
+unsupported `928x884` mode collapsed the game's window. Independent PulseAudio supplies
+the audio session. Port `8080` serves the custom Selkies web root and 7BZ top HUD.
 Openbox applies a Wolfenstein-specific fullscreen rule, so its window covers
 the entire 1280×720 display without a title bar or visible tint2 panel.
 

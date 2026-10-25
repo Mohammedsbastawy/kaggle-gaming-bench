@@ -12,7 +12,7 @@ A controller-first cloud gaming and game-development console running on Kaggle w
 ```text
 Browser: 7BZ glass HUD + WebCodecs H.264 + Opus + Gamepad API
     ↕ WSS / HTTPS
-Kaggle Jupyter Server Proxy (/proxy/8081/ when direct Xorg is ready)
+Kaggle Jupyter Server Proxy (/proxy/8080/)
     ↕ localhost
 Selkies 2.1.0 (Tesla T4 NVENC hardware H.264 60 FPS + PulseAudio Opus)
     ↕
@@ -38,7 +38,7 @@ Unprivileged User `gamer` (UID 1000):
 Open [`kaggle_game_dev_bench.ipynb`](kaggle_game_dev_bench.ipynb) in Kaggle with
 T4 x2 acceleration and Internet enabled, then run all cells. The notebook
 contains its own setup scripts, launcher updates, and web client. It starts
-the NVIDIA Xorg desktop on port 8081 automatically when supported and offers
+the unified direct NVIDIA Xorg desktop on port 8080 automatically and offers
 that stream as the primary link. The link cell asks for Kaggle's current
 VSCode Compatible URL to build the authenticated proxy URL; no shell commands
 are needed. The direct stream serves the full 7BZ top HUD, and Wolfenstein
@@ -84,7 +84,7 @@ docker run --gpus all \
 
 The host must have matching NVIDIA 64-bit and 32-bit graphics libraries. Keep its NVIDIA kernel driver and container libraries on the **same driver version**. The repository's `setup.sh` installs Xorg, VirtualGL 3.1.5 (both bitnesses), and DXVK 2.6.2 only when the relevant NVIDIA devices or ICD are present. The downloaded packages are SHA-256 checked. It does **not** install a second NVIDIA kernel driver or create a fake Vulkan ICD.
 
-`start_desktop.sh` starts the legacy Xvfb service and NVIDIA Xorg `:1`. `start_direct_stream.sh` then streams `:1` on port 8081 and starts Openbox, the dashboard, and Legendary there. The notebook chooses that one primary link when Xorg is ready; Xvfb on 8080 remains a fallback and supplies PulseAudio in the current setup. `gpu_runtime.py` checks the live OpenGL renderer and NVIDIA Vulkan device plus an actual X11 Vulkan swapchain. On `:1`, it runs directly without VirtualGL. DXVK remains gated by its Vulkan checks. See [Wolfenstein's verified launch path](IDTECH5_OPENGL.md).
+`start_direct_stream.sh` starts NVIDIA Xorg `:1`, independent PulseAudio, Openbox, the dashboard, and Legendary. It streams directly on port 8080 via Selkies with NVENC hardware acceleration on GPU 1. `gpu_runtime.py` runs games directly on `:1` using GPU 0 hardware acceleration without VirtualGL overhead. See [Wolfenstein's verified launch path](IDTECH5_OPENGL.md).
 
 From a running desktop terminal, check the result as user `gamer`:
 

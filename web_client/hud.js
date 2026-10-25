@@ -219,7 +219,7 @@
         await target.requestPointerLock();
         toast("Gaming Mode enabled. Press Esc to exit.");
       } catch (error) {
-        toast("This browser blocked pointer lock. Open this 8081 stream in Chrome or Edge for mouse look.");
+        toast("This browser blocked pointer lock. Open this stream in Chrome or Edge for mouse look.");
       }
     }
   }
