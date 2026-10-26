@@ -105,8 +105,25 @@ def _extract_images(metadata_dict: Dict[str, Any]) -> Tuple[str, str]:
     return wide_url, tall_url
 
 
+def cleanup_stale_installed_record(app_name: str):
+    """Remove a stale or uninstalled game record from both Legendary and Heroic installed.json files."""
+    candidates = (
+        HOME / ".config" / "heroic" / "legendaryConfig" / "legendary" / "installed.json",
+        HOME / ".config" / "legendary" / "installed.json",
+    )
+    for path in candidates:
+        if path.is_file():
+            try:
+                data = json.loads(path.read_text(encoding="utf-8"))
+                if isinstance(data, dict) and app_name in data:
+                    del data[app_name]
+                    path.write_text(json.dumps(data, indent=2), encoding="utf-8")
+            except Exception:
+                pass
+
+
 def legendary_installed_games() -> List[Dict[str, Any]]:
-    """Return all verified installed Epic games."""
+    """Return all verified installed Epic games that actually exist on disk."""
     candidates = (
         HOME / ".config" / "heroic" / "legendaryConfig" / "legendary" / "installed.json",
         HOME / ".config" / "legendary" / "installed.json",
@@ -118,16 +135,53 @@ def legendary_installed_games() -> List[Dict[str, Any]]:
             installed_dict.update(raw)
 
     games: List[Dict[str, Any]] = []
-    for app_name, record in installed_dict.items():
+    for app_name, record in list(installed_dict.items()):
         if not isinstance(record, dict):
             continue
+
+        raw_ip = record.get("install_path") or f"/home/gamer/Games/{app_name}"
+        install_path = Path(str(raw_ip))
+        raw_exe = record.get("executable") or ""
+
+        # Verification check: The game directory MUST exist and contain game files
+        if not install_path.is_dir():
+            cleanup_stale_installed_record(str(app_name))
+            continue
+
+        try:
+            has_files = any(install_path.iterdir())
+        except OSError:
+            has_files = False
+
+        if not has_files:
+            cleanup_stale_installed_record(str(app_name))
+            continue
+
+        # If an executable is specified or expected, ensure at least one .exe exists
+        if raw_exe:
+            exe_target = install_path / raw_exe
+            if not exe_target.is_file():
+                # Check recursive search
+                found = list(install_path.rglob("*.exe"))
+                if not found:
+                    cleanup_stale_installed_record(str(app_name))
+                    continue
+                else:
+                    raw_exe = found[0].name
+        else:
+            found = list(install_path.rglob("*.exe"))
+            if not found:
+                cleanup_stale_installed_record(str(app_name))
+                continue
+            raw_exe = found[0].name
+
         metadata = _legendary_metadata(str(app_name))
         meta_info = metadata.get("metadata", {})
         title = str(record.get("title") or metadata.get("app_title") or app_name)
         wide_url, tall_url = _extract_images(metadata)
 
         size_bytes = record.get("install_size") or 0
-        size_str = f"{size_bytes / (1024**3):.1f} GiB" if size_bytes > 0 else "44.5 GiB"
+        size_str = f"{size_bytes / (1024**3):.1f} GiB" if size_bytes > 0 else "Installed"
 
         games.append({
             "id": f"epic:{app_name}",
@@ -136,12 +190,12 @@ def legendary_installed_games() -> List[Dict[str, Any]]:
             "store": "Epic Games",
             "is_installed": True,
             "status": "Installed",
-            "install_path": str(record.get("install_path") or f"/home/gamer/Games/{app_name}"),
-            "executable": str(record.get("executable") or "WolfNewOrder_x64.exe"),
+            "install_path": str(install_path),
+            "executable": str(raw_exe),
             "size": size_str,
-            "version": str(record.get("version") or "1.3.1"),
-            "developer": meta_info.get("developer") or "Bethesda Softworks",
-            "publisher": meta_info.get("publisher") or "Bethesda",
+            "version": str(record.get("version") or "1.0"),
+            "developer": meta_info.get("developer") or "Epic Games",
+            "publisher": meta_info.get("publisher") or "Epic Games",
             "wide_art": wide_url,
             "tall_art": tall_url,
             "action": "legendary",
@@ -389,6 +443,14 @@ def pre_cache_top_games():
         if g.get("wide_art") and (app, "wide") not in _download_queue:
             _download_queue.add((app, "wide"))
             _executor.submit(_download_worker, app, g["wide_art"], "wide")
+
+
+def get_catalog() -> Dict[str, List[Dict[str, Any]]]:
+    """Helper returning complete structured catalog for dev_launcher."""
+    return {
+        "epic": epic_library_games(),
+        "local": local_games(),
+    }
 
 
 threading.Thread(target=pre_cache_top_games, daemon=True).start()

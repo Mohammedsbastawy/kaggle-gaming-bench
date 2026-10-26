@@ -239,13 +239,19 @@ def run_legendary_task(cmd_type: str, app_name: str, game_title: str):
                     active_task["eta"] = e_match.group(1)
 
             proc.wait()
+            if cmd_type == "uninstall":
+                game_catalog.cleanup_stale_installed_record(app_name)
+                for base in [Path("/home/gamer/Games") / game_title.replace(" ", ""), Path("/home/gamer/Games") / app_name]:
+                    if base.exists():
+                        shutil.rmtree(base, ignore_errors=True)
+
             if proc.returncode == 0:
                 active_task["status_text"] = f"Finished {cmd_type} for {game_title}"
                 active_task["percent"] = 100.0
             else:
                 active_task["status_text"] = f"{cmd_type.capitalize()} finished (code {proc.returncode})"
 
-            time.sleep(2)
+            time.sleep(1)
             load_library()
         except Exception as exc:
             active_task["status_text"] = f"Error: {str(exc)[:40]}"
@@ -326,6 +332,9 @@ def launch_game(item: Dict[str, Any]) -> str:
         return f"{active_game_title} is already running."
 
     action = item.get("action")
+    if action == "legendary" and not item.get("is_installed"):
+        return f"{item['title']} is not installed. Click INSTALL GAME to download."
+
     try:
         if action == "legendary":
             command = ["python3", str(BENCH / "gpu_runtime.py"), "launch", item["app_name"], wine_runner()]

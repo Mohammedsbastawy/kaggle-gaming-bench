@@ -319,11 +319,18 @@ def find_game_binary(app):
 
     install_candidates.extend([
         home / "game-builds",
-        home / ".wine/drive_c/Program Files",
-        home / ".wine/drive_c/Program Files (x86)",
         Path("/kaggle/working"),
     ])
 
+    # Only include Program Files directories that actually match the app or game name
+    for pf_root in (home / ".wine/drive_c/Program Files", home / ".wine/drive_c/Program Files (x86)"):
+        if pf_root.is_dir():
+            for sub in pf_root.iterdir():
+                if sub.is_dir() and not sub.name.lower().startswith("internet"):
+                    if app.lower() in sub.name.lower() or "wolf" in sub.name.lower():
+                        install_candidates.append(sub)
+
+    SYSTEM_EXES = {"iexplore.exe", "explorer.exe", "notepad.exe", "regedit.exe", "msiexec.exe", "wineboot.exe", "rundll32.exe", "cmd.exe", "taskmgr.exe"}
     found_exes = []
     for root in install_candidates:
         if not root.is_dir():
@@ -331,6 +338,8 @@ def find_game_binary(app):
         try:
             for p in root.rglob("*.exe"):
                 low = p.name.lower()
+                if low in SYSTEM_EXES:
+                    continue
                 if any(skip in low for skip in ("prereq", "redist", "crash", "unins", "setup", "dxsetup", "vcredist", "epicgameslauncher")):
                     continue
                 found_exes.append(p)

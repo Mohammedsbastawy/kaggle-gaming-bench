@@ -95,8 +95,9 @@ AUTH="$BENCH/nvidia-Xauthority"
 touch "$AUTH"
 chmod 600 "$AUTH"
 xauth -f "$AUTH" add :1 . "$(od -An -N16 -tx1 /dev/urandom | tr -d ' \n')"
-Xorg :1 -config "$BENCH/nvidia-headless.conf" -auth "$AUTH" -nolisten tcp -noreset >> "$LOG" 2>&1 &
+nohup /usr/lib/xorg/Xorg :1 -config "$BENCH/nvidia-headless.conf" -auth "$AUTH" -nolisten tcp -noreset >> "$LOG" 2>&1 < /dev/null &
 PID=$!
+disown "$PID" 2>/dev/null || true
 for attempt in $(seq 1 20); do
     if [ -S /tmp/.X11-unix/X1 ]; then break; fi
     if ! kill -0 "$PID" 2>/dev/null; then break; fi
