@@ -4,6 +4,7 @@ from pathlib import Path
 
 root = Path(__file__).parent
 launcher_code = (root / 'dev_launcher.py').read_text(encoding='utf-8')
+embedded_assets_code = (root / 'embedded_assets.py').read_text(encoding='utf-8')
 game_catalog_code = (root / 'game_catalog.py').read_text(encoding='utf-8')
 session_control_code = (root / 'session_control.py').read_text(encoding='utf-8')
 install_web_client_code = (root / 'install_web_client.py').read_text(encoding='utf-8')
@@ -140,6 +141,7 @@ BENCH.mkdir(parents=True, exist_ok=True)
 
 # Write the console dashboard, catalog, emergency service, and streaming HUD
 (BENCH / 'dev_launcher.py').write_text({repr(launcher_code)}, encoding='utf-8')
+(BENCH / 'embedded_assets.py').write_text({repr(embedded_assets_code)}, encoding='utf-8')
 (BENCH / 'game_catalog.py').write_text({repr(game_catalog_code)}, encoding='utf-8')
 (BENCH / 'session_control.py').write_text({repr(session_control_code)}, encoding='utf-8')
 (BENCH / 'install_web_client.py').write_text({repr(install_web_client_code)}, encoding='utf-8')
