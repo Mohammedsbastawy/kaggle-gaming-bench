@@ -393,6 +393,9 @@ while running:
     output = screen if display.get_size() == (WIDTH, HEIGHT) else pygame.transform.smoothscale(screen, display.get_size())
     display.blit(output, (0, 0))
     pygame.display.flip()
-    clock.tick(60)
+    # The dashboard is only a launcher. Redrawing its full 720p gradient at
+    # 60 FPS burns a whole CPU core even while a game covers the window.
+    # Keep navigation responsive when focused and nearly idle otherwise.
+    clock.tick(15 if pygame.key.get_focused() else 2)
 
 pygame.quit()

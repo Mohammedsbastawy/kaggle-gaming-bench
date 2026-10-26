@@ -47,6 +47,15 @@ device=$((16#${BASH_REMATCH[3]}))
 func_num=${BASH_REMATCH[4]}
 bus_id="PCI:${bus}:${device}:${func_num}"
 if [ "$domain" -ne 0 ]; then bus_id="PCI:${bus}@${domain}:${device}:${func_num}"; fi
+# Xorg can leave its socket and PID lock behind after a crash. A dead lock
+# owner proves that removing those exact files cannot disconnect a live server.
+if [ -S /tmp/.X11-unix/X1 ] && [ -f /tmp/.X1-lock ]; then
+    lock_pid=$(tr -cd '0-9' < /tmp/.X1-lock)
+    if [ -n "$lock_pid" ] && ! kill -0 "$lock_pid" 2>/dev/null; then
+        rm -f -- /tmp/.X11-unix/X1 /tmp/.X1-lock
+        echo 'Removed stale Xorg :1 socket and lock.' | tee -a "$LOG"
+    fi
+fi
 if [ -S /tmp/.X11-unix/X1 ]; then
     if grep -Fq "BusID \"$bus_id\"" "$BENCH/nvidia-headless.conf" 2>/dev/null && \
        DISPLAY=:1 XAUTHORITY="$BENCH/nvidia-Xauthority" glxinfo -B 2>&1 | grep -Eiq 'OpenGL vendor string:.*NVIDIA'; then

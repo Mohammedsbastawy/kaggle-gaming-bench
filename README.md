@@ -103,6 +103,8 @@ The direct Xorg stream uses hardware H.264 8-bit 4:2:0 at 1280×720 and 60 FPS. 
 
 WebSocket backpressure is bounded to 4 frames/chunks on the direct stream and the fallback desktop; `GAMELAB_WS_QUEUE` can override the fallback for a controlled comparison. [Selkies documents](https://docs.selkies.io/latest/reference/settings) that a larger queue can add latency. A high steady RTT with low jitter and no loss mainly reflects the network route; lowering bitrate cannot remove that baseline delay. WebRTC may offer a faster media path when direct UDP works, but a distant [TURN relay](https://github.com/selkies-project/selkies/blob/main/docs/firewall.md) can make it slower. Compare both transports in the same browser and session before changing the default WebSocket mode.
 
+The Pygame dashboard redraws at 15 FPS while focused and 2 FPS while a game covers it. In a live T4 session this reduced its CPU use from roughly one core to about 8% of a core during Wolfenstein, while the 3D opening scene streamed at 60 FPS. The same session's client-to-Kaggle HTTP round trip had a 175 ms median, close to the browser's 181 ms stream RTT; this is evidence of a route-delay floor for that session, not an encoder or bitrate problem.
+
 Use `GAMELAB_GRAPHICS_BACKEND=auto` (default), `wined3d`, or `dxvk` before launching a game. `dxvk` exits with a clear error unless Vulkan X11 presentation and both DXVK bitnesses pass the runtime probe. VirtualGL is only a fallback path for OpenGL WineD3D; the verified game path renders directly on NVIDIA Xorg. The setting is inherited by the Legendary launcher. Restart the game after changing the graphics backend.
 
 During the same repeatable gameplay segment for each candidate, run:
