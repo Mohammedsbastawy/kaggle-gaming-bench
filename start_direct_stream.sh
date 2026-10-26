@@ -85,6 +85,16 @@ rule = '''<applications>
     <decor>no</decor>
     <fullscreen>yes</fullscreen>
     <focus>yes</focus>
+  </application>
+  <application class="*dev_launcher*">
+    <decor>no</decor>
+    <position force="yes"><x>0</x><y>0</y></position>
+    <focus>yes</focus>
+  </application>
+  <application title="*7BZ Cloud Gaming*">
+    <decor>no</decor>
+    <position force="yes"><x>0</x><y>0</y></position>
+    <focus>yes</focus>
   </application>'''
 if source.count('<applications>') != 1:
     raise SystemExit('Cannot locate Openbox application rules')
@@ -129,7 +139,7 @@ nohup env SELKIES_ENCODER_DEVICE="$ENCODER_DEVICE" SELKIES_ENCODER=h264enc \
     SELKIES_AUDIO_ENABLED=true SELKIES_AUDIO_ON_START=true \
     SELKIES_AUDIO_DEVICE_NAME=output.monitor \
     python3 -m selkies --port="$PORT" --enable-basic-auth=false \
-    --framerate=60-60 --video-bitrate=8000,1000-12000 \
+    --framerate=60-60 --video-bitrate=3000,800-6000 \
     --rate-control-mode=cbr --congestion-control=true \
     --backpressure-queue-size=4 \
     --command-enabled=false --file-transfers=none --printing-enabled=false \

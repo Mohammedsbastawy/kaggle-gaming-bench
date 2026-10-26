@@ -54,7 +54,7 @@ TABS = ["EPIC GAMES", "LOCAL GAMES"]
 if pygame:
     pygame.init()
     pygame.display.set_caption("7BZ Cloud Gaming")
-    display = pygame.display.set_mode((WIDTH, HEIGHT), pygame.RESIZABLE)
+    display = pygame.display.set_mode((WIDTH, HEIGHT), pygame.NOFRAME)
     screen = pygame.Surface((WIDTH, HEIGHT)).convert()
     clock = pygame.time.Clock()
 
@@ -951,6 +951,7 @@ def main():
             elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
                 mx = round(event.pos[0] * WIDTH / max(1, display.get_width()))
                 my = round(event.pos[1] * HEIGHT / max(1, display.get_height()))
+                print(f"[Input] Mouse click at ({mx}, {my})", flush=True)
                 handle_click((mx, my))
             elif event.type == pygame.KEYDOWN:
                 games = get_current_games_list()
@@ -988,7 +989,7 @@ def main():
         display.blit(output, (0, 0))
         pygame.display.flip()
 
-        clock.tick(15 if pygame.key.get_focused() else 2)
+        clock.tick(30)
 
     pygame.quit()
 

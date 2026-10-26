@@ -281,7 +281,7 @@
       // Reset the chosen ceiling once, after the dashboard restores its settings.
       state.qualityInitialized = true;
       setTimeout(() => post({ type: "settings", settings: {
-        rate_control_mode: "cbr", video_bitrate: 8000, framerate: 60,
+        rate_control_mode: "cbr", video_bitrate: 3000, framerate: 60,
       } }), 1500);
       return;
     }
