@@ -12,3 +12,5 @@ live_stream_verified.png
 *.tar.xz
 *.exe
 selkies-source/
+
+/*.png
