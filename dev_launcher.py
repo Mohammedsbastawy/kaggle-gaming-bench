@@ -17,7 +17,12 @@ import shutil
 import subprocess
 import threading
 import time
+import sys
 from typing import Any, Dict, List, Optional, Tuple
+
+BENCH = Path(__file__).resolve().parent
+if str(BENCH) not in sys.path:
+    sys.path.insert(0, str(BENCH))
 
 try:
     import pygame
@@ -29,7 +34,6 @@ import game_catalog
 import local_tools
 
 os.environ["PATH"] = f"/usr/games:/usr/local/bin:/usr/bin:{os.environ.get('PATH', '')}"
-BENCH = Path("/tmp/kaggle-game-dev-bench")
 LOGS = Path("/home/gamer/logs")
 LOGS.mkdir(parents=True, exist_ok=True)
 
@@ -50,23 +54,56 @@ BLUE_ACCENT = (59, 130, 246)
 PLAY_CYAN = (0, 229, 255)
 DANGER_RED = (239, 68, 68)
 
-TABS = ["Local Games", "Browser", "Downloads", "Epic Games"]
+TAB_EPIC = 0
+TAB_LOCAL = 1
+TAB_DOWNLOADS = 2
+TAB_BROWSER = 3
+TABS = ["Epic Games", "Local Games", "Downloads", "Browser"]
 
-if pygame:
-    pygame.init()
-    pygame.display.set_caption("7BZ Cloud Gaming")
-    display = pygame.display.set_mode((WIDTH, HEIGHT), pygame.NOFRAME)
-    screen = pygame.Surface((WIDTH, HEIGHT)).convert()
-    clock = pygame.time.Clock()
+display = None
+screen = None
+clock = None
 
-    font_logo = pygame.font.SysFont("Liberation Sans", 24, bold=True)
-    font_hero_title = pygame.font.SysFont("Liberation Sans", 17, bold=True)
-    font_title = pygame.font.SysFont("Liberation Sans", 12, bold=True)
-    font_body = pygame.font.SysFont("Liberation Sans", 10, bold=True)
-    font_small = pygame.font.SysFont("Liberation Sans", 9)
-    font_tiny = pygame.font.SysFont("Liberation Sans", 8, bold=True)
-    font_btn = pygame.font.SysFont("Liberation Sans", 11, bold=True)
-    font_hud = pygame.font.SysFont("Liberation Mono", 10, bold=True)
+font_logo = None
+font_hero_title = None
+font_title = None
+font_body = None
+font_small = None
+font_tiny = None
+font_btn = None
+font_hud = None
+
+
+def init_graphics():
+    global display, screen, clock
+    global font_logo, font_hero_title, font_title, font_body, font_small, font_tiny, font_btn, font_hud
+    if not pygame:
+        return False
+    for attempt in range(20):
+        try:
+            pygame.init()
+            pygame.font.init()
+            pygame.display.set_caption("7BZ Cloud Gaming")
+            display = pygame.display.set_mode((WIDTH, HEIGHT), pygame.NOFRAME)
+            screen = pygame.Surface((WIDTH, HEIGHT)).convert()
+            clock = pygame.time.Clock()
+
+            font_logo = pygame.font.SysFont("Liberation Sans", 24, bold=True)
+            font_hero_title = pygame.font.SysFont("Liberation Sans", 17, bold=True)
+            font_title = pygame.font.SysFont("Liberation Sans", 12, bold=True)
+            font_body = pygame.font.SysFont("Liberation Sans", 10, bold=True)
+            font_small = pygame.font.SysFont("Liberation Sans", 9)
+            font_tiny = pygame.font.SysFont("Liberation Sans", 8, bold=True)
+            font_btn = pygame.font.SysFont("Liberation Sans", 11, bold=True)
+            font_hud = pygame.font.SysFont("Liberation Mono", 10, bold=True)
+            return True
+        except Exception as exc:
+            print(f"[dev_launcher] Waiting for X11 display :1 (attempt {attempt+1}/20): {exc}", flush=True)
+            time.sleep(1)
+    return False
+
+
+init_graphics()
 
 
 def pulse_server() -> str:
@@ -283,7 +320,7 @@ epic_user = game_catalog.get_epic_user()
 epic_games: List[Dict[str, Any]] = []
 local_list: List[Dict[str, Any]] = []
 
-tab_index = 0
+tab_index = TAB_EPIC
 explorer_folder = local_tools.BUILDS
 explorer_selected = None
 explorer_scroll = 0
@@ -319,7 +356,7 @@ load_library()
 
 
 def get_current_games_list() -> List[Dict[str, Any]]:
-    if tab_index == 3:
+    if tab_index == TAB_EPIC:
         if filter_mode == "INSTALLED":
             return [g for g in epic_games if g.get("is_installed")]
         return epic_games
@@ -859,7 +896,7 @@ def draw_workspace():
     panel = pygame.Rect(25, 120, 1230, 575)
     pygame.draw.rect(screen, PANEL_BG, panel, border_radius=14)
     pygame.draw.rect(screen, PANEL_BORDER, panel, width=1, border_radius=14)
-    if tab_index == 0:
+    if tab_index == TAB_LOCAL:
         screen.blit(font_hero_title.render("Local Games", True, TEXT_WHITE), (48, 142))
         screen.blit(font_small.render("Browse files on this cloud desktop. Select a Windows .exe to run with Wine and the game GPU.", True, TEXT_MUTED), (48, 172))
         roots = [("BUILDS", local_tools.BUILDS), ("DOWNLOADS", local_tools.DOWNLOADS),
@@ -887,13 +924,13 @@ def draw_workspace():
         selected_torrent = explorer_selected and explorer_selected.suffix.lower() == ".torrent"
         workspace_button(pygame.Rect(1020, 205, 188, 34),
                          "START TORRENT" if selected_torrent else "RUN SELECTED .EXE", True)
-    elif tab_index == 1:
+    elif tab_index == TAB_BROWSER:
         screen.blit(font_hero_title.render("Built-in Browser", True, TEXT_WHITE), (48, 142))
         screen.blit(font_body.render("Open the browser inside the streamed desktop to download your test builds and assets.", True, TEXT_MUTED), (48, 182))
         screen.blit(font_body.render("Browser downloads are saved in /home/gamer/Downloads.", True, CYAN_NEON), (48, 212))
         workspace_button(pygame.Rect(48, 270, 240, 48), "OPEN WEB BROWSER", True)
         screen.blit(font_small.render("Use Downloads for direct URLs and torrents. The browser supports ordinary web downloads.", True, TEXT_MUTED), (48, 341))
-    elif tab_index == 2:
+    elif tab_index == TAB_DOWNLOADS:
         screen.blit(font_hero_title.render("Download Manager", True, TEXT_WHITE), (48, 142))
         screen.blit(font_body.render("Direct HTTP(S) files, magnet links, and .torrent files download to /home/gamer/Downloads.", True, TEXT_MUTED), (48, 182))
         field = pygame.Rect(48, 222, 920, 42)
@@ -920,7 +957,7 @@ def draw_workspace():
 def handle_workspace_click(pos):
     global explorer_folder, explorer_selected, explorer_scroll, download_editing, message, browser_proc, tab_index
     mx, my = pos
-    if tab_index == 0:
+    if tab_index == TAB_LOCAL:
         if 205 <= my <= 239:
             roots = (local_tools.BUILDS, local_tools.DOWNLOADS, local_tools.HOME / "Games", local_tools.HOME)
             for i, root in enumerate(roots):
@@ -938,7 +975,7 @@ def handle_workspace_click(pos):
                 if explorer_selected.is_file() and explorer_selected.suffix.lower() == ".torrent":
                     try:
                         download_manager.start(str(explorer_selected))
-                        tab_index = 2
+                        tab_index = TAB_DOWNLOADS
                         message = "Torrent started."
                     except (OSError, ValueError, RuntimeError) as exc:
                         message = str(exc)
@@ -960,14 +997,14 @@ def handle_workspace_click(pos):
                         explorer_selected = path
             except OSError as exc:
                 message = str(exc)[:90]
-    elif tab_index == 1 and 48 <= mx <= 288 and 270 <= my <= 318:
+    elif tab_index == TAB_BROWSER and 48 <= mx <= 288 and 270 <= my <= 318:
         try:
             if browser_proc is None or browser_proc.poll() is not None:
                 browser_proc = local_tools.launch_browser(game_env())
             message = "Browser opened on the cloud desktop."
         except (OSError, RuntimeError) as exc:
             message = str(exc)
-    elif tab_index == 2:
+    elif tab_index == TAB_DOWNLOADS:
         download_editing = 48 <= mx <= 968 and 222 <= my <= 264
         if 980 <= mx <= 1208 and 222 <= my <= 264:
             try:
@@ -979,7 +1016,7 @@ def handle_workspace_click(pos):
             message = "Stopping transfer." if download_manager.cancel() else "No active transfer."
         elif 240 <= mx <= 460 and 284 <= my <= 322:
             explorer_folder, explorer_selected, explorer_scroll = local_tools.DOWNLOADS, None, 0
-            tab_index = 0
+            tab_index = TAB_LOCAL
 
 
 def handle_click(pos: Tuple[int, int]):
@@ -1006,7 +1043,7 @@ def handle_click(pos: Tuple[int, int]):
                 carousel_page = 0
                 return
 
-    if tab_index != 3:
+    if tab_index != TAB_EPIC:
         handle_workspace_click(pos)
         return
 
@@ -1095,11 +1132,12 @@ def handle_click(pos: Tuple[int, int]):
 
 
 def main():
-    global display, tab_index, selected_game_index, carousel_page, message
+    global display, screen, clock, tab_index, selected_game_index, carousel_page, message
     global explorer_scroll, explorer_selected, download_input, download_editing, explorer_folder
-    if not pygame:
-        print("Pygame is required to run dev_launcher.")
-        return
+    if not pygame or screen is None:
+        if not init_graphics():
+            print("Pygame display is required to run dev_launcher.", flush=True)
+            return
 
     running = True
     while running:
@@ -1109,7 +1147,7 @@ def main():
         draw_corner_brackets()
         draw_header()
         draw_tabs()
-        if tab_index == 3:
+        if tab_index == TAB_EPIC:
             draw_left_card()
             draw_center_hero()
             draw_quick_launch()
@@ -1127,14 +1165,14 @@ def main():
                 my = round(event.pos[1] * HEIGHT / max(1, display.get_height()))
                 print(f"[Input] Mouse click at ({mx}, {my})", flush=True)
                 handle_click((mx, my))
-            elif event.type == pygame.MOUSEWHEEL and tab_index == 0:
+            elif event.type == pygame.MOUSEWHEEL and tab_index == TAB_LOCAL:
                 try:
                     explorer_scroll = max(0, min(max(0, len(local_tools.entries(explorer_folder)) - 10),
                                                  explorer_scroll - event.y * 3))
                 except OSError:
                     explorer_scroll = 0
             elif event.type == pygame.KEYDOWN:
-                if tab_index == 2 and download_editing:
+                if tab_index == TAB_DOWNLOADS and download_editing:
                     if event.key == pygame.K_RETURN:
                         try:
                             download_manager.start(download_input)
@@ -1156,11 +1194,11 @@ def main():
                     elif event.unicode and event.unicode.isprintable():
                         download_input += event.unicode
                     continue
-                if tab_index == 0 and event.key == pygame.K_BACKSPACE:
+                if tab_index == TAB_LOCAL and event.key == pygame.K_BACKSPACE:
                     explorer_folder = explorer_folder.parent
                     explorer_scroll = 0
                     continue
-                if tab_index == 0 and event.key in (pygame.K_UP, pygame.K_DOWN, pygame.K_RETURN):
+                if tab_index == TAB_LOCAL and event.key in (pygame.K_UP, pygame.K_DOWN, pygame.K_RETURN):
                     try:
                         listing = local_tools.entries(explorer_folder)
                         if event.key in (pygame.K_UP, pygame.K_DOWN) and listing:
@@ -1180,11 +1218,11 @@ def main():
                                                        "store": "Local Game"})
                             elif explorer_selected.suffix.lower() == ".torrent":
                                 download_manager.start(str(explorer_selected))
-                                tab_index = 2
+                                tab_index = TAB_DOWNLOADS
                     except (OSError, ValueError, RuntimeError) as exc:
                         message = str(exc)[:100]
                     continue
-                if tab_index != 3 and event.key != pygame.K_TAB:
+                if tab_index != TAB_EPIC and event.key != pygame.K_TAB:
                     continue
                 games = get_current_games_list()
                 total_games = len(games)
@@ -1223,8 +1261,19 @@ def main():
 
         clock.tick(30)
 
-    pygame.quit()
+    try:
+        pygame.quit()
+    except Exception:
+        pass
 
 
 if __name__ == "__main__":
-    main()
+    while True:
+        try:
+            main()
+            break
+        except KeyboardInterrupt:
+            break
+        except Exception as exc:
+            print(f"[dev_launcher] Main loop exception: {exc}", flush=True)
+            time.sleep(2)

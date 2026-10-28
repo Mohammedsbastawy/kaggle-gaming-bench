@@ -107,16 +107,38 @@ start_desktop_program() {
     if [ -f "$pidfile" ] && kill -0 "$(cat "$pidfile")" 2>/dev/null; then
         return
     fi
+
+    chmod 755 /root 2>/dev/null || true
+    chmod -R 755 /root/.local 2>/dev/null || true
+    chmod 644 "$BENCH/nvidia-Xauthority" 2>/dev/null || true
+
+    local py_ver
+    py_ver=$(python3 -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")' 2>/dev/null || echo "3.10")
+
     runuser -u gamer -- env DISPLAY=:1 HOME=/home/gamer \
+        XAUTHORITY="$BENCH/nvidia-Xauthority" \
         XDG_RUNTIME_DIR="$AUDIO_RUNTIME" PULSE_SERVER="$PULSE_SERVER" \
         PULSE_COOKIE="$AUDIO_COOKIE" PULSE_SINK=output SDL_AUDIODRIVER=pulse \
         CUDA_VISIBLE_DEVICES=0 GAMELAB_DIRECT_XORG=1 \
         SELKIES_JS_SOCKET_PATH="$SELKIES_JS_SOCKET_PATH" \
-        PYTHONPATH=/root/.local/lib/python3.13/site-packages:/usr/local/lib/python3.13/dist-packages \
+        PYTHONPATH="$BENCH:/root/.local/lib/python${py_ver}/site-packages:/home/gamer/.local/lib/python${py_ver}/site-packages:/usr/local/lib/python${py_ver}/dist-packages:${PYTHONPATH:-}" \
         "$@" > "$BENCH/logs/direct-${label}.log" 2>&1 < /dev/null &
     echo $! > "$pidfile"
 }
 start_desktop() {
+    chmod 644 "$BENCH/nvidia-Xauthority" 2>/dev/null || true
+    cp -f "$BENCH/nvidia-Xauthority" /home/gamer/.Xauthority 2>/dev/null || true
+    chown gamer:gamer /home/gamer/.Xauthority 2>/dev/null || true
+    chmod 644 /home/gamer/.Xauthority 2>/dev/null || true
+
+    chmod 755 /root 2>/dev/null || true
+    chmod -R 755 /root/.local 2>/dev/null || true
+    chmod -R 777 /home/gamer 2>/dev/null || true
+
+    DISPLAY=:1 XAUTHORITY="$BENCH/nvidia-Xauthority" xhost + 2>/dev/null || true
+    DISPLAY=:1 XAUTHORITY="$BENCH/nvidia-Xauthority" xhost +local: 2>/dev/null || true
+    DISPLAY=:1 XAUTHORITY="$BENCH/nvidia-Xauthority" xhost +si:localuser:gamer 2>/dev/null || true
+
     chmod 666 "$SELKIES_JS_SOCKET_PATH"/*.sock 2>/dev/null || true
     # The HUD's input-mode switch and diagnostics live on this control port.
     # The fallback desktop starts it separately, but direct Xorg must too.

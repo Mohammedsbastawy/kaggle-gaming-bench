@@ -30,14 +30,22 @@ if install_web.is_file():
         print(f"Notice: Web client installation: {e}", flush=True)
 
 # 2. Stop any previous stream session to avoid port conflicts
-for pid_path in (BENCH / "direct-stream.pid", BENCH / "selkies.pid"):
+for pid_name in ("direct-stream.pid", "selkies.pid", "direct-dashboard.pid",
+                 "direct-openbox.pid", "direct-control.pid", "direct-tint2.pid"):
+    pid_path = BENCH / pid_name
     if pid_path.is_file():
         try:
             pid = int(pid_path.read_text().strip())
             os.kill(pid, signal.SIGTERM)
-            time.sleep(1)
+            time.sleep(0.5)
         except (ValueError, OSError):
             pass
+        pid_path.unlink(missing_ok=True)
+
+# Grant user gamer access to root site-packages and xauthority
+subprocess.run(["chmod", "755", "/root"], check=False)
+subprocess.run(["chmod", "-R", "755", "/root/.local"], check=False)
+subprocess.run(["chmod", "644", str(BENCH / "nvidia-Xauthority")], check=False)
 
 # 3. Environment configuration for asymmetric dual-GPU (GPU 0 render, GPU 1 encode)
 env = os.environ.copy()
