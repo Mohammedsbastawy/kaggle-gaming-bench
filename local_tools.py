@@ -110,9 +110,12 @@ class DownloadManager:
         source = source.strip()
         parsed = urlparse(source)
         torrent_file = Path(source).expanduser()
-        if not (parsed.scheme in ("https", "http", "magnet") or
-                (torrent_file.is_file() and torrent_file.suffix.lower() == ".torrent")):
-            raise ValueError("Enter an HTTP(S) URL, magnet link, or .torrent file path.")
+
+        if parsed.scheme == "magnet" or (torrent_file.is_file() and torrent_file.suffix.lower() == ".torrent"):
+            raise ValueError("Torrent / P2P traffic is blocked on cloud platforms to prevent provider bans. Please use direct HTTPS links or the built-in browser.")
+
+        if not parsed.scheme in ("https", "http"):
+            raise ValueError("Enter a direct HTTP(S) download URL.")
         if not shutil.which("aria2c"):
             raise RuntimeError("aria2 is not installed. Run setup.sh again.")
         with self._lock:

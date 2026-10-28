@@ -937,7 +937,7 @@ def draw_workspace():
             screen.blit(font_body.render(str(exc)[:100], True, DANGER_RED), (48, 288))
         selected_torrent = explorer_selected and explorer_selected.suffix.lower() == ".torrent"
         selected_archive = explorer_selected and local_tools.is_archive(explorer_selected)
-        btn_label = "START TORRENT" if selected_torrent else ("EXTRACT ARCHIVE" if selected_archive else "RUN SELECTED .EXE")
+        btn_label = "EXTRACT ARCHIVE" if selected_archive else "RUN SELECTED .EXE"
         workspace_button(pygame.Rect(980, 205, 228, 34), btn_label, True)
     elif tab_index == TAB_BROWSER:
         screen.blit(font_hero_title.render("Built-in Web Browser (Chromium)", True, TEXT_WHITE), (48, 142))
@@ -945,15 +945,15 @@ def draw_workspace():
         screen.blit(font_body.render("Downloads from the browser are saved directly into /home/gamer/Downloads.", True, CYAN_NEON), (48, 212))
         workspace_button(pygame.Rect(48, 270, 240, 48), "OPEN WEB BROWSER", True)
         workspace_button(pygame.Rect(310, 270, 240, 48), "VIEW DOWNLOADS TAB")
-        screen.blit(font_small.render("Use Downloads tab for torrents & RAR extraction. Use Browser for ordinary web surfing.", True, TEXT_MUTED), (48, 341))
+        screen.blit(font_small.render("Use Downloads tab for direct links & RAR extraction. Use Browser for ordinary web surfing.", True, TEXT_MUTED), (48, 341))
     elif tab_index == TAB_DOWNLOADS:
         screen.blit(font_hero_title.render("Download Manager & Archive Tool", True, TEXT_WHITE), (48, 138))
-        screen.blit(font_small.render("Download via direct link / magnet link, or manage and extract downloaded RAR/ZIP files.", True, TEXT_MUTED), (48, 168))
+        screen.blit(font_small.render("Download via direct HTTPS links, or manage and extract downloaded RAR/ZIP files.", True, TEXT_MUTED), (48, 168))
 
         field = pygame.Rect(48, 192, 920, 36)
         pygame.draw.rect(screen, (10, 16, 28), field, border_radius=8)
         pygame.draw.rect(screen, CYAN_NEON if download_editing else PANEL_BORDER, field, width=1, border_radius=8)
-        prompt = download_input or "Click here to type or paste URL, magnet link, or .torrent file path..."
+        prompt = download_input or "Click here to type or paste direct HTTPS download URL (Google Drive, Mega, Direct link)..."
         screen.blit(font_body.render(clipped(prompt, font_body, 880), True,
                                      TEXT_WHITE if download_input else TEXT_MUTED), (60, 201))
         workspace_button(pygame.Rect(980, 192, 228, 36), "START DOWNLOAD", True)
@@ -1045,14 +1045,7 @@ def handle_workspace_click(pos):
                 explorer_selected, explorer_scroll = None, 0
                 return
             if 980 <= mx <= 1208 and explorer_selected:
-                if explorer_selected.is_file() and explorer_selected.suffix.lower() == ".torrent":
-                    try:
-                        download_manager.start(str(explorer_selected))
-                        tab_index = TAB_DOWNLOADS
-                        message = "Torrent started."
-                    except (OSError, ValueError, RuntimeError) as exc:
-                        message = str(exc)
-                elif explorer_selected.is_file() and local_tools.is_archive(explorer_selected):
+                if explorer_selected.is_file() and local_tools.is_archive(explorer_selected):
                     try:
                         extraction_manager.extract(explorer_selected)
                         message = f"Extracting {explorer_selected.name}..."
@@ -1116,12 +1109,6 @@ def handle_workspace_click(pos):
             elif downloads_selected.suffix.lower() == ".exe":
                 message = launch_game({"title": downloads_selected.stem, "action": "local-exe",
                                        "install_path": str(downloads_selected), "store": "Local Game"})
-            elif downloads_selected.suffix.lower() == ".torrent":
-                try:
-                    download_manager.start(str(downloads_selected))
-                    message = "Torrent download started."
-                except (OSError, ValueError, RuntimeError) as exc:
-                    message = str(exc)
         # Cancel Extraction
         elif 1105 <= mx <= 1208 and 289 <= my <= 320:
             message = "Extraction cancelled." if extraction_manager.cancel() else "No extraction running."
