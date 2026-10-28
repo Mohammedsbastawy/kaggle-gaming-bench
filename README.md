@@ -2,6 +2,8 @@
 
 A controller-first cloud gaming and game-development console running on Kaggle with dual Tesla T4 GPUs, Selkies 2.1.0 streaming, and unified storefront integration. The verified Wolfenstein path renders directly on GPU 0's NVIDIA Xorg display and streams that desktop with GPU 1's NVENC encoder.
 
+Start with [PROJECT_GUIDE.md](PROJECT_GUIDE.md) for the Git-based startup flow, setup profiles, architecture, validation, and rollback instructions.
+
 [![Kaggle Notebook](https://img.shields.io/badge/Kaggle-Interactive%20GPU%20Bench-20BEFF?logo=kaggle)](https://www.kaggle.com/code/mohammedbastawy/interactive-gpu-game-development-bench-20261023)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
