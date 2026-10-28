@@ -69,15 +69,15 @@ apt_install "core desktop" \
 
 # Developer desktop: direct downloads/torrents and a native browser in the stream.
 apt_install "download manager" aria2
-apt_install "desktop browser" chromium
-if ! command -v chromium >/dev/null 2>&1 && ! command -v chromium-browser >/dev/null 2>&1; then
-    apt_install "fallback desktop browser" firefox-esr
+if ! command -v chromium >/dev/null 2>&1 && ! command -v chromium-browser >/dev/null 2>&1 && ! command -v google-chrome-stable >/dev/null 2>&1; then
+    echo "▶ Installing desktop browser..."
+    apt-get install -y --no-install-recommends -o DPkg::Lock::Timeout=120 chromium || true
 fi
-if ! command -v chromium >/dev/null 2>&1 && ! command -v chromium-browser >/dev/null 2>&1 && ! command -v firefox >/dev/null 2>&1; then
+if ! command -v chromium >/dev/null 2>&1 && ! command -v chromium-browser >/dev/null 2>&1 && ! command -v google-chrome-stable >/dev/null 2>&1; then
     CHROME_DEB=/tmp/google-chrome-stable_current_amd64.deb
     wget -q https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb -O "$CHROME_DEB" || true
     if [ -f "$CHROME_DEB" ] && [ "$(stat -c%s "$CHROME_DEB" 2>/dev/null || echo 0)" -gt 50000000 ]; then
-        apt_install "Chrome desktop browser" "$CHROME_DEB"
+        apt-get install -y --no-install-recommends -o DPkg::Lock::Timeout=120 "$CHROME_DEB" || true
     fi
 fi
 
@@ -287,6 +287,9 @@ if [ -x "$WINE_GE_DIR/Wine-GE-Proton8-26/bin/wineboot" ]; then
         fi
     done
 
+    # These installers and winetricks can add minutes. Local builds can opt in
+    # when they require VC runtimes; the historical full profile keeps them.
+    if [ "$SETUP_PROFILE" = full ] || [ "${GAMELAB_PREINSTALL_PREREQS:-0}" = 1 ]; then
     # Pre-install Microsoft Visual C++ 2015-2022 runtimes (x64 and x86) into Wine prefix
     echo "▶ Pre-installing Microsoft Visual C++ runtimes into Wine prefix..."
     REDIST_DIR="/tmp/vc_redist"
@@ -305,7 +308,9 @@ if [ -x "$WINE_GE_DIR/Wine-GE-Proton8-26/bin/wineboot" ]; then
     echo "▶ Installing the Unreal Engine Visual C++ prerequisite..."
     runuser -u gamer -- env WINEPREFIX="/home/gamer/.wine" WINEARCH=win64 WINEDLLOVERRIDES="mscoree,mshtml=d" \
         winetricks -q vcrun2019 2>/dev/null || true
+    fi
 
+    if [ "$SETUP_PROFILE" = full ]; then
     echo "▶ Applying verified DirectInput, AMD FSR, and zero-acceleration mouse settings..."
     for reg_entry in \
         'HKEY_CURRENT_USER\Software\Wine\DirectInput|MouseWarpOverride|force' \
@@ -325,6 +330,7 @@ if [ -x "$WINE_GE_DIR/Wine-GE-Proton8-26/bin/wineboot" ]; then
             "$WINE_GE_DIR/Wine-GE-Proton8-26/bin/wine" reg add "$rkey" \
             /v "$rname" /t REG_SZ /d "$rval" /f 2>/dev/null || true
     done
+    fi
     echo "✓ Wine prefix fully initialized with DXVK, VKD3D-Proton, and FSR upscaling."
 fi
 

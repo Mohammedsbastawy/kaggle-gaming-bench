@@ -17,6 +17,8 @@ Git holds the application and boot code. `build_dev_notebook.py` generates the s
 
 The `full` path remains available for compatibility. The local path avoids optional storefront downloads and their repeated setup. Within the same Kaggle session, a `.setup-complete` marker keyed by Git revision and profile skips setup when the required tools are still present. A new Kaggle container has no installed packages or marker; Git alone cannot preserve apt packages, Wine prefixes, or browser binaries across fresh sessions. For a larger cold-start reduction, distribute a compatible prebuilt environment through a Kaggle dataset or image, then verify GPU driver compatibility before changing this path.
 
+The local profile also skips boot-time Visual C++ installers, `winetricks vcrun2019`, and repeated Wine registry writes. `gpu_runtime.py` applies the game input settings at launch. If a build needs Microsoft VC runtimes, set `GAMELAB_PREINSTALL_PREREQS=1` in the first notebook code cell before running setup, or use the `full` profile. The notebook prints setup duration to help compare cold starts. This change reduces setup work but does not promise a particular cold-start time; apt, Wine-GE, GPU provisioning, and network speed still vary by Kaggle session.
+
 ## Runtime map
 
 | File | Responsibility |

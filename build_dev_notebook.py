@@ -6,11 +6,12 @@ from pathlib import Path
 ROOT = Path(__file__).parent
 
 bootstrap = '''from pathlib import Path
-import importlib.util, os, shutil, subprocess, sys
+import importlib.util, os, shutil, subprocess, sys, time
 
 REPO = Path('/tmp/kaggle-game-dev-bench')
 URL = 'https://github.com/Mohammedsbastawy/kaggle-gaming-bench.git'
 PROFILE = os.environ.get('GAMELAB_SETUP_PROFILE', 'local')
+PREREQS = os.environ.get('GAMELAB_PREINSTALL_PREREQS', '0')
 if PROFILE not in ('local', 'full'):
     raise ValueError('GAMELAB_SETUP_PROFILE must be local or full')
 
@@ -21,7 +22,7 @@ else:
 
 revision = subprocess.check_output(['git', '-C', str(REPO), 'rev-parse', 'HEAD'], text=True).strip()
 marker = REPO / '.setup-complete'
-ready = (marker.is_file() and marker.read_text().strip() == f'{revision}:{PROFILE}'
+ready = (marker.is_file() and marker.read_text().strip() == f'{revision}:{PROFILE}:{PREREQS}'
          and shutil.which('wine') and shutil.which('aria2c')
          and importlib.util.find_spec('selkies') and importlib.util.find_spec('pygame'))
 if ready:
@@ -29,9 +30,10 @@ if ready:
 else:
     print(f'Preparing 7BZ {PROFILE} profile from Git revision {revision[:12]}...', flush=True)
     env = dict(os.environ, GAMELAB_SETUP_PROFILE=PROFILE)
+    started = time.monotonic()
     subprocess.run(['bash', str(REPO / 'setup.sh')], check=True, env=env)
-    marker.write_text(f'{revision}:{PROFILE}', encoding='utf-8')
-    print('7BZ setup complete.', flush=True)
+    marker.write_text(f'{revision}:{PROFILE}:{PREREQS}', encoding='utf-8')
+    print(f'7BZ setup complete in {time.monotonic() - started:.1f}s.', flush=True)
 '''
 
 start = '''from pathlib import Path
