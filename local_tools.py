@@ -164,7 +164,7 @@ def find_working_browser() -> Optional[str]:
     return None
 
 
-def launch_browser(env):
+def launch_browser(env, url="https://www.google.com"):
     binary = find_working_browser()
     if not binary:
         raise RuntimeError("Google Chrome is not installed. Run 'apt-get install -y /tmp/google-chrome-stable_current_amd64.deb'")
@@ -203,7 +203,7 @@ def launch_browser(env):
             "--disable-breakpad",
             "--test-type",
         ]
-    args += ["https://www.google.com"]
+    args += [url]
 
     log_dir = Path("/tmp/kaggle-game-dev-bench/logs")
     log_dir.mkdir(parents=True, exist_ok=True)

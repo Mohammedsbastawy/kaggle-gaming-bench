@@ -42,19 +42,75 @@ def _read_json(path: Path) -> Any:
 
 def get_epic_user() -> Dict[str, Any]:
     """Return Epic account username and login details."""
-    user_file = HOME / ".config" / "legendary" / "user.json"
-    data = _read_json(user_file)
-    if isinstance(data, dict) and data.get("displayName"):
-        return {
-            "displayName": data["displayName"],
-            "accountId": data.get("account_id", ""),
-            "status": "Connected"
-        }
+    candidates = (
+        HOME / ".config" / "legendary" / "user.json",
+        HOME / ".config" / "heroic" / "legendaryConfig" / "legendary" / "user.json",
+        Path("/root/.config/legendary/user.json"),
+    )
+    for path in candidates:
+        data = _read_json(path)
+        if isinstance(data, dict) and data.get("displayName"):
+            return {
+                "displayName": data["displayName"],
+                "accountId": data.get("account_id", ""),
+                "status": "Connected",
+                "is_authenticated": True
+            }
     return {
-        "displayName": "Gamerhbaza",
-        "accountId": "EpicCloudUser",
-        "status": "Connected"
+        "displayName": "Not Logged In",
+        "accountId": "",
+        "status": "Disconnected",
+        "is_authenticated": False
     }
+
+
+def login_legendary(auth_code: str) -> Tuple[bool, str]:
+    """Authenticates legendary with Epic Games using an authorization code or sid."""
+    auth_code = auth_code.strip().strip('"').strip("'")
+    if "authorizationCode" in auth_code:
+        try:
+            data = json.loads(auth_code)
+            auth_code = data.get("authorizationCode", auth_code)
+        except Exception:
+            pass
+    if "code=" in auth_code:
+        auth_code = auth_code.split("code=")[-1].split("&")[0]
+
+    is_root = (os.getuid() == 0) if hasattr(os, "getuid") else False
+    prefix = ["runuser", "-u", "gamer", "--"] if is_root else []
+
+    try:
+        res = subprocess.run(
+            prefix + ["legendary", "auth", "--code", auth_code],
+            capture_output=True,
+            text=True,
+            timeout=45,
+            env=os.environ.copy()
+        )
+        output = res.stdout + res.stderr
+        if res.returncode == 0 or "Successfully" in output or "Logged in" in output:
+            subprocess.run(prefix + ["legendary", "list-games"], capture_output=True, timeout=60, env=os.environ.copy())
+            return True, "Successfully logged in to Epic Games!"
+        return False, output.strip()[:120] if output.strip() else "Authentication failed."
+    except Exception as exc:
+        return False, str(exc)[:100]
+
+
+def sync_legendary_library() -> Tuple[bool, str]:
+    """Sync owned games metadata via legendary list-games."""
+    is_root = (os.getuid() == 0) if hasattr(os, "getuid") else False
+    prefix = ["runuser", "-u", "gamer", "--"] if is_root else []
+    try:
+        res = subprocess.run(
+            prefix + ["legendary", "list-games"],
+            capture_output=True,
+            text=True,
+            timeout=60,
+            env=os.environ.copy()
+        )
+        return res.returncode == 0, res.stdout + res.stderr
+    except Exception as exc:
+        return False, str(exc)
 
 
 def _legendary_metadata(app_name: str) -> Dict[str, Any]:

@@ -234,12 +234,15 @@ def run_legendary_task(cmd_type: str, app_name: str, game_title: str):
 
     def task_worker():
         try:
+            is_root = (os.getuid() == 0) if hasattr(os, "getuid") else False
+            prefix = ["runuser", "-u", "gamer", "--"] if is_root else []
+
             if cmd_type == "verify":
-                cmd = ["runuser", "-u", "gamer", "--", "legendary", "verify", app_name]
+                cmd = prefix + ["legendary", "verify", app_name]
             elif cmd_type == "install":
-                cmd = ["runuser", "-u", "gamer", "--", "legendary", "install", app_name, "--yes"]
+                cmd = prefix + ["legendary", "install", app_name, "--yes"]
             elif cmd_type == "uninstall":
-                cmd = ["runuser", "-u", "gamer", "--", "legendary", "uninstall", app_name, "--yes"]
+                cmd = prefix + ["legendary", "uninstall", app_name, "--yes"]
             else:
                 return
 
@@ -249,7 +252,8 @@ def run_legendary_task(cmd_type: str, app_name: str, game_title: str):
                 stderr=subprocess.STDOUT,
                 text=True,
                 bufsize=1,
-                start_new_session=True
+                start_new_session=True,
+                env=game_env()
             )
             active_task["proc"] = proc
 
@@ -346,6 +350,36 @@ PAGE_SIZE = 4
 message = "Select a game to view details or launch"
 active_proc: Optional[subprocess.Popen] = None
 active_game_title = ""
+
+epic_login_modal = False
+epic_auth_code_input = ""
+epic_auth_editing = False
+epic_auth_status = ""
+EPIC_AUTH_URL = "https://www.epicgames.com/id/api/redirect?clientId=34a02cf8f4414e29b159218764c3fa0a&responseType=code"
+
+
+def submit_epic_login():
+    global epic_auth_status
+    clean = epic_auth_code_input.strip()
+    if not clean:
+        epic_auth_status = "Please paste your authorization code first."
+        return
+
+    epic_auth_status = "Authenticating with Epic Games..."
+
+    def worker():
+        global epic_auth_status, epic_login_modal, message
+        ok, res_msg = game_catalog.login_legendary(clean)
+        if ok:
+            epic_auth_status = "Success! Loading your library..."
+            load_library()
+            time.sleep(1)
+            epic_login_modal = False
+            message = f"Connected to Epic Games as {epic_user['displayName']}! {len(epic_games)} games found."
+        else:
+            epic_auth_status = f"Login failed: {res_msg}"
+
+    threading.Thread(target=worker, daemon=True).start()
 
 toggles = {
     "boost": True,
@@ -565,14 +599,18 @@ def draw_left_card():
 
     # 1. Epic Games Account Profile
     y = 168
+    is_auth = epic_user.get("is_authenticated", False)
+    user_name = epic_user.get("displayName", "Not Logged In")
     pygame.draw.circle(screen, (16, 32, 54), (56, y + 16), 18)
-    pygame.draw.circle(screen, CYAN_NEON, (56, y + 16), 18, 1)
-    lbl_usr_ico = font_title.render("E", True, CYAN_NEON)
+    pygame.draw.circle(screen, CYAN_NEON if is_auth else DANGER_RED, (56, y + 16), 18, 1)
+    lbl_usr_ico = font_title.render("E", True, CYAN_NEON if is_auth else DANGER_RED)
     screen.blit(lbl_usr_ico, (51, y + 7))
 
-    user_name = epic_user.get("displayName", "Gamerhbaza")
-    screen.blit(font_body.render(user_name.upper(), True, TEXT_WHITE), (86, y + 4))
-    screen.blit(font_tiny.render("EPIC ONLINE CONNECTED", True, LIME_GREEN), (86, y + 22))
+    screen.blit(font_body.render(user_name.upper()[:14], True, TEXT_WHITE), (86, y + 4))
+    if is_auth:
+        screen.blit(font_tiny.render("EPIC ONLINE CONNECTED", True, LIME_GREEN), (86, y + 22))
+    else:
+        screen.blit(font_tiny.render("NOT LOGGED IN (CLICK LOGIN)", True, DANGER_RED), (86, y + 22))
 
     # 2. Host Storage Pool Section (Real Kaggle Storage)
     y = 232
@@ -629,12 +667,18 @@ def draw_left_card():
         draw_toggle(pygame.Rect(card.right - 54, y, 36, 18), toggles[key])
         y += 36
 
-    # 5. Sync Account Button
+    # 5. Sync / Login Account Button
     btn_sync = pygame.Rect(40, 638, 215, 36)
-    pygame.draw.rect(screen, (22, 32, 50), btn_sync, border_radius=8)
-    pygame.draw.rect(screen, (35, 50, 75), btn_sync, width=1, border_radius=8)
-    lbl_sync = font_btn.render("SYNC EPIC LIBRARY", True, CYAN_NEON)
-    screen.blit(lbl_sync, (btn_sync.centerx - lbl_sync.get_width() // 2, btn_sync.centery - lbl_sync.get_height() // 2))
+    if is_auth:
+        pygame.draw.rect(screen, (22, 32, 50), btn_sync, border_radius=8)
+        pygame.draw.rect(screen, (35, 50, 75), btn_sync, width=1, border_radius=8)
+        lbl_sync = font_btn.render("SYNC EPIC LIBRARY", True, CYAN_NEON)
+        screen.blit(lbl_sync, (btn_sync.centerx - lbl_sync.get_width() // 2, btn_sync.centery - lbl_sync.get_height() // 2))
+    else:
+        pygame.draw.rect(screen, (16, 48, 64), btn_sync, border_radius=8)
+        pygame.draw.rect(screen, CYAN_NEON, btn_sync, width=1, border_radius=8)
+        lbl_sync = font_btn.render("LOGIN TO EPIC GAMES", True, CYAN_NEON)
+        screen.blit(lbl_sync, (btn_sync.centerx - lbl_sync.get_width() // 2, btn_sync.centery - lbl_sync.get_height() // 2))
 
 
 def draw_center_hero():
@@ -645,8 +689,19 @@ def draw_center_hero():
 
     game = get_selected_game()
     if not game:
-        lbl_empty = font_title.render("No games found in selected library view.", True, TEXT_MUTED)
-        screen.blit(lbl_empty, (hero_rect.centerx - lbl_empty.get_width() // 2, hero_rect.centery))
+        if not epic_user.get("is_authenticated", False):
+            lbl_empty = font_title.render("Epic Games Account Not Connected", True, TEXT_WHITE)
+            lbl_sub = font_body.render("Log in to Epic Games (Legendary) to sync and download your library.", True, CYAN_NEON)
+            screen.blit(lbl_empty, (hero_rect.centerx - lbl_empty.get_width() // 2, hero_rect.centery - 45))
+            screen.blit(lbl_sub, (hero_rect.centerx - lbl_sub.get_width() // 2, hero_rect.centery - 15))
+            btn_center_login = pygame.Rect(hero_rect.centerx - 120, hero_rect.centery + 20, 240, 42)
+            pygame.draw.rect(screen, (16, 48, 64), btn_center_login, border_radius=8)
+            pygame.draw.rect(screen, CYAN_NEON, btn_center_login, width=1, border_radius=8)
+            lbl_btn = font_btn.render("LOGIN TO EPIC GAMES", True, CYAN_NEON)
+            screen.blit(lbl_btn, (btn_center_login.centerx - lbl_btn.get_width() // 2, btn_center_login.centery - lbl_btn.get_height() // 2))
+        else:
+            lbl_empty = font_title.render("No games found in selected library view.", True, TEXT_MUTED)
+            screen.blit(lbl_empty, (hero_rect.centerx - lbl_empty.get_width() // 2, hero_rect.centery))
         return
 
     # 1. Wide Banner Artwork
@@ -1231,7 +1286,61 @@ def handle_workspace_click(pos):
 
 def handle_click(pos: Tuple[int, int]):
     global tab_index, selected_game_index, carousel_page, filter_mode, message
+    global epic_login_modal, epic_auth_code_input, epic_auth_editing, epic_auth_status
     mx, my = pos
+
+    if epic_login_modal:
+        # Close button or click outside
+        if (1005 <= mx <= 1035 and 111 <= my <= 141) or not (230 <= mx <= 1050 and 95 <= my <= 615):
+            epic_login_modal = False
+            return
+        # Open in browser (265 to 545, y: 222 to 260)
+        if 265 <= mx <= 545 and 222 <= my <= 260:
+            try:
+                local_tools.launch_browser(game_env(), url=EPIC_AUTH_URL)
+                epic_auth_status = "Google Chrome opened with Epic login page."
+            except Exception as e:
+                epic_auth_status = f"Browser error: {e}"
+            return
+        # Copy link (565 to 740, y: 222 to 260)
+        if 565 <= mx <= 740 and 222 <= my <= 260:
+            try:
+                import tkinter
+                t = tkinter.Tk()
+                t.withdraw()
+                t.clipboard_clear()
+                t.clipboard_append(EPIC_AUTH_URL)
+                t.update()
+                t.destroy()
+                epic_auth_status = "Login URL copied to clipboard!"
+            except Exception:
+                epic_auth_status = "Login URL: epicgames.com/id/api/redirect"
+            return
+        # Input box (265 to 1015, y: 344 to 386)
+        if 265 <= mx <= 1015 and 344 <= my <= 386:
+            epic_auth_editing = True
+            return
+        # Submit login button (265 to 475, y: 404 to 446)
+        if 265 <= mx <= 475 and 404 <= my <= 446:
+            submit_epic_login()
+            return
+        # Paste button (495 to 655, y: 404 to 446)
+        if 495 <= mx <= 655 and 404 <= my <= 446:
+            try:
+                import tkinter
+                t = tkinter.Tk()
+                t.withdraw()
+                epic_auth_code_input = t.clipboard_get().strip()
+                t.destroy()
+                epic_auth_status = "Code pasted from clipboard."
+            except Exception:
+                epic_auth_status = "Clipboard empty; please paste with Ctrl+V."
+            return
+        # Cancel button (675 to 795, y: 404 to 446)
+        if 675 <= mx <= 795 and 404 <= my <= 446:
+            epic_login_modal = False
+            return
+        return
 
     # 1. Stop Game Button (Header top-right)
     if active_proc is not None and active_proc.poll() is None:
@@ -1277,14 +1386,31 @@ def handle_click(pos: Tuple[int, int]):
         elif 470 <= my <= 500:
             toggles["gamepad"] = not toggles["gamepad"]
 
-        # Sync Library Button
+        # Sync / Login Button
         if 638 <= my <= 674:
-            message = "Syncing Epic Games Library..."
-            load_library()
+            if not epic_user.get("is_authenticated", False):
+                epic_login_modal = True
+                epic_auth_editing = True
+                epic_auth_status = ""
+            else:
+                message = "Syncing Epic Games Library..."
+                def sync_worker():
+                    global message
+                    ok, log = game_catalog.sync_legendary_library()
+                    load_library()
+                    message = f"Library synced: {len(epic_games)} games found."
+                threading.Thread(target=sync_worker, daemon=True).start()
             return
 
     # 4. Center Hero Action Buttons
     game = get_selected_game()
+    if not game:
+        # Check if login button in center was clicked (x: 502 to 742, y: 240 to 282)
+        if 502 <= mx <= 742 and 240 <= my <= 282 and not epic_user.get("is_authenticated", False):
+            epic_login_modal = True
+            epic_auth_editing = True
+            epic_auth_status = ""
+            return
     if game and 330 <= my <= 368:
         is_inst = game.get("is_installed", False)
         if is_inst:
@@ -1341,6 +1467,76 @@ def handle_click(pos: Tuple[int, int]):
             return
 
 
+def draw_epic_login_modal():
+    """Draw stylish centered modal for Epic Games / Legendary authentication."""
+    overlay = pygame.Surface((WIDTH, HEIGHT), pygame.SRCALPHA)
+    overlay.fill((0, 0, 0, 205))
+    screen.blit(overlay, (0, 0))
+
+    modal = pygame.Rect(230, 95, 820, 520)
+    pygame.draw.rect(screen, (13, 20, 32), modal, border_radius=14)
+    pygame.draw.rect(screen, CYAN_NEON, modal, width=1, border_radius=14)
+
+    # Header
+    screen.blit(font_title.render("LOGIN TO EPIC GAMES (LEGENDARY)", True, TEXT_WHITE), (265, 120))
+    screen.blit(font_small.render("Connect your Epic account to download, sync, and launch your owned games.", True, TEXT_MUTED), (265, 152))
+
+    # Close button [X]
+    btn_close = pygame.Rect(modal.right - 45, modal.y + 16, 30, 30)
+    pygame.draw.rect(screen, (22, 30, 44), btn_close, border_radius=6)
+    lbl_x = font_btn.render("X", True, TEXT_MUTED)
+    screen.blit(lbl_x, (btn_close.centerx - lbl_x.get_width() // 2, btn_close.centery - lbl_x.get_height() // 2))
+
+    # Step 1
+    screen.blit(font_body.render("1. Click below to open Epic Games login in Google Chrome:", True, TEXT_WHITE), (265, 192))
+    btn_open = pygame.Rect(265, 222, 280, 38)
+    pygame.draw.rect(screen, (16, 48, 64), btn_open, border_radius=8)
+    pygame.draw.rect(screen, CYAN_NEON, btn_open, width=1, border_radius=8)
+    lbl_o = font_btn.render("OPEN EPIC LOGIN PAGE", True, CYAN_NEON)
+    screen.blit(lbl_o, (btn_open.centerx - lbl_o.get_width() // 2, btn_open.centery - lbl_o.get_height() // 2))
+
+    btn_copy = pygame.Rect(565, 222, 175, 38)
+    pygame.draw.rect(screen, (20, 28, 42), btn_copy, border_radius=8)
+    pygame.draw.rect(screen, PANEL_BORDER, btn_copy, width=1, border_radius=8)
+    lbl_cp = font_btn.render("COPY LOGIN LINK", True, TEXT_WHITE)
+    screen.blit(lbl_cp, (btn_copy.centerx - lbl_cp.get_width() // 2, btn_copy.centery - lbl_cp.get_height() // 2))
+
+    # Step 2
+    screen.blit(font_body.render("2. Sign into your account. The webpage will show your authorizationCode.", True, TEXT_WHITE), (265, 278))
+
+    # Step 3
+    screen.blit(font_body.render("3. Paste the authorizationCode (or the full text / URL) below:", True, TEXT_WHITE), (265, 314))
+    input_box = pygame.Rect(265, 344, 750, 42)
+    pygame.draw.rect(screen, (8, 12, 20), input_box, border_radius=8)
+    pygame.draw.rect(screen, CYAN_NEON if epic_auth_editing else PANEL_BORDER, input_box, width=1, border_radius=8)
+
+    prompt = epic_auth_code_input or "Click here to paste or type code (Ctrl+V)..."
+    screen.blit(font_body.render(clipped(prompt, font_body, 720), True,
+                                 TEXT_WHITE if epic_auth_code_input else TEXT_MUTED), (278, 356))
+
+    # Action buttons
+    btn_sub = pygame.Rect(265, 404, 210, 42)
+    pygame.draw.rect(screen, CYAN_NEON, btn_sub, border_radius=8)
+    lbl_sub = font_btn.render("SUBMIT LOGIN", True, (10, 16, 28))
+    screen.blit(lbl_sub, (btn_sub.centerx - lbl_sub.get_width() // 2, btn_sub.centery - lbl_sub.get_height() // 2))
+
+    btn_paste = pygame.Rect(495, 404, 160, 42)
+    pygame.draw.rect(screen, (20, 28, 42), btn_paste, border_radius=8)
+    pygame.draw.rect(screen, PANEL_BORDER, btn_paste, width=1, border_radius=8)
+    lbl_p = font_btn.render("PASTE (Ctrl+V)", True, TEXT_WHITE)
+    screen.blit(lbl_p, (btn_paste.centerx - lbl_p.get_width() // 2, btn_paste.centery - lbl_p.get_height() // 2))
+
+    btn_can = pygame.Rect(675, 404, 120, 42)
+    pygame.draw.rect(screen, (20, 28, 42), btn_can, border_radius=8)
+    lbl_c = font_btn.render("CANCEL", True, TEXT_MUTED)
+    screen.blit(lbl_c, (btn_can.centerx - lbl_c.get_width() // 2, btn_can.centery - lbl_c.get_height() // 2))
+
+    # Status Line
+    if epic_auth_status:
+        st_col = LIME_GREEN if ("Success" in epic_auth_status or "Logged in" in epic_auth_status) else (CYAN_NEON if "..." in epic_auth_status else DANGER_RED)
+        screen.blit(font_body.render(clipped(epic_auth_status, font_body, 730), True, st_col), (265, 468))
+
+
 def main():
     global display, screen, clock, tab_index, selected_game_index, carousel_page, message
     global explorer_scroll, explorer_selected, download_input, download_editing, explorer_folder
@@ -1373,6 +1569,9 @@ def main():
         else:
             draw_workspace()
 
+        if epic_login_modal:
+            draw_epic_login_modal()
+
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 running = False
@@ -1397,6 +1596,26 @@ def main():
                     except OSError:
                         downloads_scroll = 0
             elif event.type == pygame.KEYDOWN:
+                if epic_login_modal:
+                    if event.key == pygame.K_ESCAPE:
+                        epic_login_modal = False
+                    elif event.key == pygame.K_RETURN:
+                        submit_epic_login()
+                    elif event.key == pygame.K_BACKSPACE:
+                        epic_auth_code_input = epic_auth_code_input[:-1]
+                    elif event.key == pygame.K_v and event.mod & pygame.KMOD_CTRL:
+                        try:
+                            import tkinter
+                            clip = tkinter.Tk()
+                            clip.withdraw()
+                            epic_auth_code_input = clip.clipboard_get().strip()
+                            clip.destroy()
+                        except Exception:
+                            pass
+                    elif event.unicode and event.unicode.isprintable():
+                        epic_auth_code_input += event.unicode
+                    continue
+
                 if tab_index == TAB_DOWNLOADS and download_editing:
                     if event.key == pygame.K_RETURN:
                         try:
