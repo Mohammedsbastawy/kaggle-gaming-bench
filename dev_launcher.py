@@ -89,7 +89,7 @@ def init_graphics():
             info = pygame.display.Info()
             disp_w = info.current_w if info.current_w > 640 else WIDTH
             disp_h = info.current_h if info.current_h > 360 else HEIGHT
-            display = pygame.display.set_mode((disp_w, disp_h), pygame.NOFRAME | pygame.RESIZABLE)
+            display = pygame.display.set_mode((disp_w, disp_h), pygame.RESIZABLE)
             screen = pygame.Surface((WIDTH, HEIGHT)).convert()
             clock = pygame.time.Clock()
 
@@ -1548,14 +1548,6 @@ def main():
     running = True
     while running:
         update_telemetry()
-        try:
-            curr_info = pygame.display.Info()
-            if curr_info.current_w > 640 and curr_info.current_h > 360:
-                if (curr_info.current_w, curr_info.current_h) != display.get_size():
-                    display = pygame.display.set_mode((curr_info.current_w, curr_info.current_h), pygame.NOFRAME | pygame.RESIZABLE)
-        except Exception:
-            pass
-
         screen.fill(BG_COLOR)
 
         draw_corner_brackets()
