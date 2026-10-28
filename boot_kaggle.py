@@ -42,10 +42,30 @@ for pid_name in ("direct-stream.pid", "selkies.pid", "direct-dashboard.pid",
             pass
         pid_path.unlink(missing_ok=True)
 
+subprocess.run(["pkill", "-f", "dev_launcher.py"], check=False)
+
 # Grant user gamer access to root site-packages and xauthority
 subprocess.run(["chmod", "755", "/root"], check=False)
 subprocess.run(["chmod", "-R", "755", "/root/.local"], check=False)
 subprocess.run(["chmod", "644", str(BENCH / "nvidia-Xauthority")], check=False)
+
+# Ensure archive tools (7z, unrar, zip) are installed
+if not shutil.which("7z") and not shutil.which("unrar"):
+    print("▶ Ensuring archive extraction tools (p7zip-full, unrar-free)...", flush=True)
+    subprocess.run(["apt-get", "install", "-y", "--no-install-recommends", "-o", "DPkg::Lock::Timeout=60",
+                    "p7zip-full", "unrar-free", "zip", "unzip"], check=False)
+
+# Ensure desktop browser is installed
+if not any(shutil.which(b) for b in ("chromium", "chromium-browser", "google-chrome", "firefox")):
+    print("▶ Ensuring desktop browser (chromium)...", flush=True)
+    subprocess.run(["apt-get", "install", "-y", "--no-install-recommends", "-o", "DPkg::Lock::Timeout=60",
+                    "chromium"], check=False)
+
+# Start live command bridge on port 9000
+bridge_script = BENCH / "remote_bridge.py"
+if bridge_script.is_file():
+    subprocess.run(["pkill", "-f", "remote_bridge.py"], check=False)
+    subprocess.Popen([sys.executable, str(bridge_script)], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
 
 # 3. Environment configuration for asymmetric dual-GPU (GPU 0 render, GPU 1 encode)
 env = os.environ.copy()

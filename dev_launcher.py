@@ -327,6 +327,9 @@ explorer_scroll = 0
 download_input = ""
 download_editing = False
 download_manager = local_tools.DownloadManager()
+extraction_manager = local_tools.ExtractionManager()
+downloads_selected = None
+downloads_scroll = 0
 browser_proc = None
 filter_mode = "ALL"       # "ALL" or "INSTALLED"
 selected_game_index = 0
@@ -897,8 +900,8 @@ def draw_workspace():
     pygame.draw.rect(screen, PANEL_BG, panel, border_radius=14)
     pygame.draw.rect(screen, PANEL_BORDER, panel, width=1, border_radius=14)
     if tab_index == TAB_LOCAL:
-        screen.blit(font_hero_title.render("Local Games", True, TEXT_WHITE), (48, 142))
-        screen.blit(font_small.render("Browse files on this cloud desktop. Select a Windows .exe to run with Wine and the game GPU.", True, TEXT_MUTED), (48, 172))
+        screen.blit(font_hero_title.render("Local Games & Developer Builds", True, TEXT_WHITE), (48, 142))
+        screen.blit(font_small.render("Browse files on this cloud desktop. Run Windows .exe games or extract .rar/.zip archives with high performance.", True, TEXT_MUTED), (48, 172))
         roots = [("BUILDS", local_tools.BUILDS), ("DOWNLOADS", local_tools.DOWNLOADS),
                  ("GAMES", local_tools.HOME / "Games"), ("HOME", local_tools.HOME)]
         for i, (label, _) in enumerate(roots):
@@ -914,48 +917,113 @@ def draw_workspace():
                 row = pygame.Rect(48, y, 1160, 31)
                 selected = path == explorer_selected
                 pygame.draw.rect(screen, (29, 47, 66) if selected else (20, 28, 42), row, border_radius=5)
-                kind = "FOLDER" if path.is_dir() else path.suffix.upper().lstrip(".")
+                if path.is_dir():
+                    kind = "FOLDER"
+                elif local_tools.is_archive(path):
+                    kind = "ARCHIVE (" + path.suffix.upper().lstrip(".") + ")"
+                else:
+                    kind = path.suffix.upper().lstrip(".")
                 screen.blit(font_body.render(clipped(path.name, font_body, 850), True,
                                              CYAN_NEON if selected else TEXT_WHITE), (60, y + 8))
-                screen.blit(font_small.render(kind, True, TEXT_MUTED), (1110, y + 8))
-            screen.blit(font_small.render(f"{len(listing)} items  |  Mouse wheel to scroll  |  Select an EXE, then Run", True, TEXT_MUTED), (48, 644))
+                screen.blit(font_small.render(kind, True, LIME_GREEN if "ARCHIVE" in kind else TEXT_MUTED), (1110, y + 8))
+            ext_tag = f"  |  Extracting: {extraction_manager.state} ({extraction_manager.detail[:50]})" if extraction_manager.state != "Idle" else ""
+            screen.blit(font_small.render(f"{len(listing)} items  |  Wheel to scroll  |  Select an EXE, RAR or ZIP{ext_tag}", True, TEXT_MUTED), (48, 644))
         except OSError as exc:
             screen.blit(font_body.render(str(exc)[:100], True, DANGER_RED), (48, 288))
         selected_torrent = explorer_selected and explorer_selected.suffix.lower() == ".torrent"
-        workspace_button(pygame.Rect(1020, 205, 188, 34),
-                         "START TORRENT" if selected_torrent else "RUN SELECTED .EXE", True)
+        selected_archive = explorer_selected and local_tools.is_archive(explorer_selected)
+        btn_label = "START TORRENT" if selected_torrent else ("EXTRACT ARCHIVE" if selected_archive else "RUN SELECTED .EXE")
+        workspace_button(pygame.Rect(980, 205, 228, 34), btn_label, True)
     elif tab_index == TAB_BROWSER:
-        screen.blit(font_hero_title.render("Built-in Browser", True, TEXT_WHITE), (48, 142))
-        screen.blit(font_body.render("Open the browser inside the streamed desktop to download your test builds and assets.", True, TEXT_MUTED), (48, 182))
-        screen.blit(font_body.render("Browser downloads are saved in /home/gamer/Downloads.", True, CYAN_NEON), (48, 212))
+        screen.blit(font_hero_title.render("Built-in Web Browser (Chromium)", True, TEXT_WHITE), (48, 142))
+        screen.blit(font_body.render("Open Chromium inside the cloud desktop to download game builds, mods, and assets directly.", True, TEXT_MUTED), (48, 182))
+        screen.blit(font_body.render("Downloads from the browser are saved directly into /home/gamer/Downloads.", True, CYAN_NEON), (48, 212))
         workspace_button(pygame.Rect(48, 270, 240, 48), "OPEN WEB BROWSER", True)
-        screen.blit(font_small.render("Use Downloads for direct URLs and torrents. The browser supports ordinary web downloads.", True, TEXT_MUTED), (48, 341))
+        workspace_button(pygame.Rect(310, 270, 240, 48), "VIEW DOWNLOADS TAB")
+        screen.blit(font_small.render("Use Downloads tab for torrents & RAR extraction. Use Browser for ordinary web surfing.", True, TEXT_MUTED), (48, 341))
     elif tab_index == TAB_DOWNLOADS:
-        screen.blit(font_hero_title.render("Download Manager", True, TEXT_WHITE), (48, 142))
-        screen.blit(font_body.render("Direct HTTP(S) files, magnet links, and .torrent files download to /home/gamer/Downloads.", True, TEXT_MUTED), (48, 182))
-        field = pygame.Rect(48, 222, 920, 42)
+        screen.blit(font_hero_title.render("Download Manager & Archive Tool", True, TEXT_WHITE), (48, 138))
+        screen.blit(font_small.render("Download via direct link / magnet link, or manage and extract downloaded RAR/ZIP files.", True, TEXT_MUTED), (48, 168))
+
+        field = pygame.Rect(48, 192, 920, 36)
         pygame.draw.rect(screen, (10, 16, 28), field, border_radius=8)
         pygame.draw.rect(screen, CYAN_NEON if download_editing else PANEL_BORDER, field, width=1, border_radius=8)
-        prompt = download_input or "Click and paste a URL, magnet link, or .torrent file path"
+        prompt = download_input or "Click here to type or paste URL, magnet link, or .torrent file path..."
         screen.blit(font_body.render(clipped(prompt, font_body, 880), True,
-                                     TEXT_WHITE if download_input else TEXT_MUTED), (60, 236))
-        workspace_button(pygame.Rect(980, 222, 228, 42), "START DOWNLOAD", True)
-        workspace_button(pygame.Rect(48, 284, 180, 38), "STOP TRANSFER")
-        workspace_button(pygame.Rect(240, 284, 220, 38), "OPEN DOWNLOADS")
-        screen.blit(font_title.render(f"STATUS: {download_manager.state}", True, CYAN_NEON), (48, 360))
-        screen.blit(font_body.render(clipped(download_manager.source, font_body, 1080), True, TEXT_WHITE), (48, 396))
-        track = pygame.Rect(48, 430, 1160, 14)
-        pygame.draw.rect(screen, (28, 39, 57), track, border_radius=7)
-        fill = round(1160 * min(100, max(0, download_manager.percent)) / 100)
+                                     TEXT_WHITE if download_input else TEXT_MUTED), (60, 201))
+        workspace_button(pygame.Rect(980, 192, 228, 36), "START DOWNLOAD", True)
+
+        transfer_text = f"TRANSFER: {download_manager.state}"
+        if download_manager.speed:
+            transfer_text += f"   Speed: {download_manager.speed}   ETA: {download_manager.eta}"
+        screen.blit(font_small.render(transfer_text, True, CYAN_NEON if download_manager.state == "Downloading" else TEXT_MUTED), (48, 236))
+
+        track = pygame.Rect(48, 254, 980, 10)
+        pygame.draw.rect(screen, (28, 39, 57), track, border_radius=5)
+        fill = round(980 * min(100, max(0, download_manager.percent)) / 100)
         if fill:
-            pygame.draw.rect(screen, CYAN_NEON, pygame.Rect(48, 430, fill, 14), border_radius=7)
-        screen.blit(font_body.render(f"{download_manager.percent:.1f}%   {download_manager.speed}   ETA {download_manager.eta}", True, TEXT_WHITE), (48, 465))
-        screen.blit(font_small.render(clipped(download_manager.detail, font_small, 1100), True, TEXT_MUTED), (48, 503))
+            pygame.draw.rect(screen, CYAN_NEON, pygame.Rect(48, 254, fill, 10), border_radius=5)
+        workspace_button(pygame.Rect(1040, 244, 168, 28), "STOP TRANSFER")
+
+        pygame.draw.line(screen, PANEL_BORDER, (48, 282), (WIDTH - 48, 282), 1)
+
+        screen.blit(font_title.render("DOWNLOADED FILES & RAR/ZIP EXTRACTOR (/home/gamer/Downloads)", True, TEXT_WHITE), (48, 294))
+        workspace_button(pygame.Rect(720, 289, 90, 30), "REFRESH")
+
+        sel_is_archive = downloads_selected and local_tools.is_archive(downloads_selected)
+        sel_is_exe = downloads_selected and downloads_selected.suffix.lower() == ".exe"
+        sel_is_torrent = downloads_selected and downloads_selected.suffix.lower() == ".torrent"
+        act_label = "EXTRACT ARCHIVE (.RAR/.ZIP)" if sel_is_archive else ("RUN .EXE" if sel_is_exe else ("START TORRENT" if sel_is_torrent else "SELECT ARCHIVE TO EXTRACT"))
+        act_active = bool(sel_is_archive or sel_is_exe or sel_is_torrent)
+        workspace_button(pygame.Rect(825, 289, 265, 30), act_label, act_active)
+
+        if extraction_manager.state == "Extracting":
+            workspace_button(pygame.Rect(1105, 289, 103, 30), "CANCEL")
+
+        try:
+            dl_items = local_tools.entries(local_tools.DOWNLOADS)
+            visible = dl_items[downloads_scroll:downloads_scroll + 8]
+            for i, path in enumerate(visible):
+                y = 328 + i * 33
+                row = pygame.Rect(48, y, 1160, 30)
+                selected = path == downloads_selected
+                pygame.draw.rect(screen, (29, 47, 66) if selected else (20, 28, 42), row, border_radius=5)
+                if path.is_dir():
+                    tag = "FOLDER"
+                elif local_tools.is_archive(path):
+                    tag = "ARCHIVE (" + path.suffix.upper().lstrip(".") + ")"
+                else:
+                    tag = path.suffix.upper().lstrip(".")
+
+                size_str = ""
+                try:
+                    if path.is_file():
+                        sz = path.stat().st_size
+                        if sz > 1024**3:
+                            size_str = f"{sz / (1024**3):.2f} GB"
+                        elif sz > 1024**2:
+                            size_str = f"{sz / (1024**2):.1f} MB"
+                        else:
+                            size_str = f"{sz // 1024} KB"
+                except OSError:
+                    pass
+
+                screen.blit(font_body.render(clipped(path.name, font_body, 800), True,
+                                             CYAN_NEON if selected else TEXT_WHITE), (60, y + 8))
+                screen.blit(font_small.render(size_str, True, TEXT_MUTED), (920, y + 8))
+                screen.blit(font_small.render(tag, True, LIME_GREEN if "ARCHIVE" in tag else TEXT_MUTED), (1050, y + 8))
+
+            info_line = f"{len(dl_items)} files  |  Click to select  |  EXTRACTION: {extraction_manager.state} ({extraction_manager.detail[:60]})"
+            screen.blit(font_small.render(info_line, True, CYAN_NEON if extraction_manager.state == "Extracting" else TEXT_MUTED), (48, 608))
+        except OSError as exc:
+            screen.blit(font_body.render(str(exc)[:100], True, DANGER_RED), (48, 335))
+
     screen.blit(font_small.render(clipped(message, font_small, 1160), True, CYAN_NEON), (48, 672))
 
 
 def handle_workspace_click(pos):
     global explorer_folder, explorer_selected, explorer_scroll, download_editing, message, browser_proc, tab_index
+    global downloads_selected, downloads_scroll
     mx, my = pos
     if tab_index == TAB_LOCAL:
         if 205 <= my <= 239:
@@ -971,7 +1039,7 @@ def handle_workspace_click(pos):
             if 710 <= mx <= 820:
                 explorer_selected, explorer_scroll = None, 0
                 return
-            if 1020 <= mx <= 1208 and explorer_selected:
+            if 980 <= mx <= 1208 and explorer_selected:
                 if explorer_selected.is_file() and explorer_selected.suffix.lower() == ".torrent":
                     try:
                         download_manager.start(str(explorer_selected))
@@ -979,11 +1047,17 @@ def handle_workspace_click(pos):
                         message = "Torrent started."
                     except (OSError, ValueError, RuntimeError) as exc:
                         message = str(exc)
+                elif explorer_selected.is_file() and local_tools.is_archive(explorer_selected):
+                    try:
+                        extraction_manager.extract(explorer_selected)
+                        message = f"Extracting {explorer_selected.name}..."
+                    except (OSError, ValueError, RuntimeError) as exc:
+                        message = str(exc)
                 elif explorer_selected.is_file() and explorer_selected.suffix.lower() == ".exe":
                     message = launch_game({"title": explorer_selected.stem, "action": "local-exe",
                                            "install_path": str(explorer_selected), "store": "Local Game"})
                 else:
-                    message = "Select a Windows .exe file first."
+                    message = "Select a Windows .exe or archive (.rar/.zip) first."
                 return
         if 286 <= my < 626:
             try:
@@ -997,26 +1071,64 @@ def handle_workspace_click(pos):
                         explorer_selected = path
             except OSError as exc:
                 message = str(exc)[:90]
-    elif tab_index == TAB_BROWSER and 48 <= mx <= 288 and 270 <= my <= 318:
-        try:
-            if browser_proc is None or browser_proc.poll() is not None:
-                browser_proc = local_tools.launch_browser(game_env())
-            message = "Browser opened on the cloud desktop."
-        except (OSError, RuntimeError) as exc:
-            message = str(exc)
+
+    elif tab_index == TAB_BROWSER:
+        if 48 <= mx <= 288 and 270 <= my <= 318:
+            try:
+                if browser_proc is None or browser_proc.poll() is not None:
+                    browser_proc = local_tools.launch_browser(game_env())
+                message = "Chromium browser opened on cloud desktop."
+            except (OSError, RuntimeError) as exc:
+                message = str(exc)
+        elif 310 <= mx <= 550 and 270 <= my <= 318:
+            tab_index = TAB_DOWNLOADS
+
     elif tab_index == TAB_DOWNLOADS:
-        download_editing = 48 <= mx <= 968 and 222 <= my <= 264
-        if 980 <= mx <= 1208 and 222 <= my <= 264:
+        download_editing = 48 <= mx <= 968 and 192 <= my <= 228
+        # Start Download
+        if 980 <= mx <= 1208 and 192 <= my <= 228:
             try:
                 download_manager.start(download_input)
                 message = "Download started."
             except (OSError, ValueError, RuntimeError) as exc:
                 message = str(exc)
-        elif 48 <= mx <= 228 and 284 <= my <= 322:
+        # Stop Transfer
+        elif 1040 <= mx <= 1208 and 244 <= my <= 274:
             message = "Stopping transfer." if download_manager.cancel() else "No active transfer."
-        elif 240 <= mx <= 460 and 284 <= my <= 322:
-            explorer_folder, explorer_selected, explorer_scroll = local_tools.DOWNLOADS, None, 0
-            tab_index = TAB_LOCAL
+        # Refresh Downloads
+        elif 720 <= mx <= 810 and 289 <= my <= 320:
+            downloads_selected = None
+            downloads_scroll = 0
+            message = "Downloads refreshed."
+        # Action button (Extract Archive / Run EXE / Start Torrent)
+        elif 825 <= mx <= 1090 and 289 <= my <= 320 and downloads_selected:
+            if local_tools.is_archive(downloads_selected):
+                try:
+                    extraction_manager.extract(downloads_selected)
+                    message = f"Extracting {downloads_selected.name}..."
+                except (OSError, ValueError, RuntimeError) as exc:
+                    message = str(exc)
+            elif downloads_selected.suffix.lower() == ".exe":
+                message = launch_game({"title": downloads_selected.stem, "action": "local-exe",
+                                       "install_path": str(downloads_selected), "store": "Local Game"})
+            elif downloads_selected.suffix.lower() == ".torrent":
+                try:
+                    download_manager.start(str(downloads_selected))
+                    message = "Torrent download started."
+                except (OSError, ValueError, RuntimeError) as exc:
+                    message = str(exc)
+        # Cancel Extraction
+        elif 1105 <= mx <= 1208 and 289 <= my <= 320:
+            message = "Extraction cancelled." if extraction_manager.cancel() else "No extraction running."
+        # File list rows in Downloads
+        elif 48 <= mx <= 1208 and 328 <= my < 600:
+            try:
+                dl_items = local_tools.entries(local_tools.DOWNLOADS)
+                idx = downloads_scroll + (my - 328) // 33
+                if 0 <= idx < len(dl_items):
+                    downloads_selected = dl_items[idx]
+            except OSError as exc:
+                message = str(exc)[:90]
 
 
 def handle_click(pos: Tuple[int, int]):
@@ -1165,12 +1277,19 @@ def main():
                 my = round(event.pos[1] * HEIGHT / max(1, display.get_height()))
                 print(f"[Input] Mouse click at ({mx}, {my})", flush=True)
                 handle_click((mx, my))
-            elif event.type == pygame.MOUSEWHEEL and tab_index == TAB_LOCAL:
-                try:
-                    explorer_scroll = max(0, min(max(0, len(local_tools.entries(explorer_folder)) - 10),
-                                                 explorer_scroll - event.y * 3))
-                except OSError:
-                    explorer_scroll = 0
+            elif event.type == pygame.MOUSEWHEEL:
+                if tab_index == TAB_LOCAL:
+                    try:
+                        explorer_scroll = max(0, min(max(0, len(local_tools.entries(explorer_folder)) - 10),
+                                                     explorer_scroll - event.y * 3))
+                    except OSError:
+                        explorer_scroll = 0
+                elif tab_index == TAB_DOWNLOADS:
+                    try:
+                        downloads_scroll = max(0, min(max(0, len(local_tools.entries(local_tools.DOWNLOADS)) - 8),
+                                                      downloads_scroll - event.y * 2))
+                    except OSError:
+                        downloads_scroll = 0
             elif event.type == pygame.KEYDOWN:
                 if tab_index == TAB_DOWNLOADS and download_editing:
                     if event.key == pygame.K_RETURN:
@@ -1211,6 +1330,12 @@ def main():
                             if explorer_selected.is_dir():
                                 explorer_folder = explorer_selected
                                 explorer_selected, explorer_scroll = None, 0
+                            elif local_tools.is_archive(explorer_selected):
+                                try:
+                                    extraction_manager.extract(explorer_selected)
+                                    message = f"Extracting {explorer_selected.name}..."
+                                except (OSError, ValueError, RuntimeError) as exc:
+                                    message = str(exc)[:100]
                             elif explorer_selected.suffix.lower() == ".exe":
                                 message = launch_game({"title": explorer_selected.stem,
                                                        "action": "local-exe",

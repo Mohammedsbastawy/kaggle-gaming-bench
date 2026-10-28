@@ -65,7 +65,7 @@ apt-get update -o DPkg::Lock::Timeout=120 -qq || true
 apt_install "core desktop" \
     xvfb openbox tint2 xterm pulseaudio pulseaudio-utils xauth dbus-x11 \
     libgl1-mesa-dri libgbm1 libpixman-1-0 libxkbcommon0 mesa-utils x11-utils vulkan-tools \
-    xdotool xinput wmctrl wget curl cabextract p7zip-full zstd winetricks python3-pygame python3-aiohttp
+    xdotool xinput wmctrl wget curl cabextract p7zip-full unrar-free zip unzip zstd winetricks python3-pygame python3-aiohttp
 
 # Developer desktop: direct downloads/torrents and a native browser in the stream.
 apt_install "download manager" aria2

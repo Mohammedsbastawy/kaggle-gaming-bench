@@ -95,6 +95,14 @@ rule = '''<applications>
     <decor>no</decor>
     <position force="yes"><x>0</x><y>0</y></position>
     <focus>yes</focus>
+  </application>
+  <application class="*Chromium*" title="*">
+    <decor>yes</decor>
+    <focus>yes</focus>
+  </application>
+  <application class="*Google-chrome*" title="*">
+    <decor>yes</decor>
+    <focus>yes</focus>
   </application>'''
 if source.count('<applications>') != 1:
     raise SystemExit('Cannot locate Openbox application rules')
