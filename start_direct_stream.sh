@@ -126,7 +126,6 @@ start_desktop() {
         start_desktop_program tint2 tint2 -c "$BENCH/tint2rc"
     fi
     start_desktop_program dashboard python3 "$BENCH/dev_launcher.py"
-    start_desktop_program legendary python3 "$BENCH/legendary_gui.py"
 }
 if curl -fsS "http://127.0.0.1:${PORT}/api/health" >/dev/null 2>&1; then
     start_desktop

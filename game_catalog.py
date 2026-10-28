@@ -453,4 +453,9 @@ def get_catalog() -> Dict[str, List[Dict[str, Any]]]:
     }
 
 
+def discover_games() -> List[Dict[str, Any]]:
+    """Compatibility alias returning combined list of games for session_control API."""
+    return epic_library_games() + local_games()
+
+
 threading.Thread(target=pre_cache_top_games, daemon=True).start()

@@ -415,7 +415,11 @@ def select_graphics_backend(facts, preference="auto", is_64bit=True):
     return "software"
 
 
-def launch(app, wine):
+def launch(app, wine, local_path=None):
+    local_target = Path(local_path).expanduser().resolve() if local_path else None
+    if local_target and (not local_target.is_file() or local_target.suffix.lower() != ".exe"):
+        print("Local game must be an existing .exe file", file=sys.stderr)
+        return 2
     facts = diagnose()
     env = clean_env()
     direct_xorg = (env.get("DISPLAY", "").split(".", 1)[0] == ":1" and
@@ -490,10 +494,20 @@ def launch(app, wine):
         interposer = "/usr/$LIB/selkies_input_interposer.so:/usr/$LIB/selkies_fake_udev.so"
         env["LD_PRELOAD"] = (interposer + ":" + env.get("LD_PRELOAD", "")).rstrip(":")
 
-    target_bin = find_game_binary(app)
+    target_bin = local_target if local_target else find_game_binary(app)
     is_64bit = True
-    if target_bin and "32" in target_bin.name.lower() and "64" not in target_bin.name.lower():
-        is_64bit = False
+    if target_bin:
+        try:
+            with target_bin.open("rb") as binary:
+                if binary.read(2) == b"MZ":
+                    binary.seek(0x3c)
+                    pe_offset = int.from_bytes(binary.read(4), "little")
+                    binary.seek(pe_offset)
+                    if binary.read(4) == b"PE\0\0":
+                        machine = int.from_bytes(binary.read(2), "little")
+                        is_64bit = machine != 0x14c
+        except OSError:
+            pass
     launch_cwd = str(target_bin.parent) if target_bin else None
 
     # Switch to 64-bit Wine binary for 64-bit binaries to prevent 32-bit wrapper dropping 64-bit VGL faker
@@ -608,8 +622,10 @@ def launch(app, wine):
 if __name__ == "__main__":
     if len(sys.argv) == 2 and sys.argv[1] == "diagnose":
         print(json.dumps(diagnose(), indent=2))
+    elif len(sys.argv) == 4 and sys.argv[1] == "launch-file":
+        sys.exit(launch("", sys.argv[3], local_path=sys.argv[2]))
     elif len(sys.argv) == 4 and sys.argv[1] == "launch":
         sys.exit(launch(sys.argv[2], sys.argv[3]))
     else:
-        print("Usage: gpu_runtime.py diagnose | launch APP WINE_BIN", file=sys.stderr)
+        print("Usage: gpu_runtime.py diagnose | launch APP WINE_BIN | launch-file PATH WINE_BIN", file=sys.stderr)
         sys.exit(2)

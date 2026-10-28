@@ -26,6 +26,7 @@ except ImportError:
 
 import embedded_assets
 import game_catalog
+import local_tools
 
 os.environ["PATH"] = f"/usr/games:/usr/local/bin:/usr/bin:{os.environ.get('PATH', '')}"
 BENCH = Path("/tmp/kaggle-game-dev-bench")
@@ -49,7 +50,7 @@ BLUE_ACCENT = (59, 130, 246)
 PLAY_CYAN = (0, 229, 255)
 DANGER_RED = (239, 68, 68)
 
-TABS = ["EPIC GAMES", "LOCAL GAMES"]
+TABS = ["Local Games", "Browser", "Downloads", "Epic Games"]
 
 if pygame:
     pygame.init()
@@ -282,7 +283,14 @@ epic_user = game_catalog.get_epic_user()
 epic_games: List[Dict[str, Any]] = []
 local_list: List[Dict[str, Any]] = []
 
-tab_index = 0             # 0: EPIC GAMES, 1: LOCAL GAMES
+tab_index = 0
+explorer_folder = local_tools.BUILDS
+explorer_selected = None
+explorer_scroll = 0
+download_input = ""
+download_editing = False
+download_manager = local_tools.DownloadManager()
+browser_proc = None
 filter_mode = "ALL"       # "ALL" or "INSTALLED"
 selected_game_index = 0
 carousel_page = 0
@@ -311,11 +319,11 @@ load_library()
 
 
 def get_current_games_list() -> List[Dict[str, Any]]:
-    if tab_index == 0:
+    if tab_index == 3:
         if filter_mode == "INSTALLED":
             return [g for g in epic_games if g.get("is_installed")]
         return epic_games
-    return local_list
+    return []
 
 
 def get_selected_game() -> Optional[Dict[str, Any]]:
@@ -338,12 +346,17 @@ def launch_game(item: Dict[str, Any]) -> str:
     try:
         if action == "legendary":
             command = ["python3", str(BENCH / "gpu_runtime.py"), "launch", item["app_name"], wine_runner()]
+        elif action == "local-exe":
+            command = ["python3", str(BENCH / "gpu_runtime.py"), "launch-file",
+                       item["install_path"], wine_runner()]
         elif action == "build":
             path = item["install_path"]
             if path.lower().endswith(".py"):
                 command = ["python3", path]
             elif path.lower().endswith(".sh"):
                 command = ["bash", path]
+            elif path.lower().endswith(".exe"):
+                command = ["python3", str(BENCH / "gpu_runtime.py"), "launch-file", path, wine_runner()]
             else:
                 command = [path]
         else:
@@ -459,15 +472,15 @@ def draw_header():
 
 
 def draw_tabs():
-    """Draw the 2 primary tabs: EPIC GAMES and LOCAL GAMES."""
-    tab_w = 210
-    total_w = 2 * tab_w + 16
+    """Draw workspace navigation."""
+    tab_w = 180
+    total_w = len(TABS) * tab_w + (len(TABS) - 1) * 12
     start_x = (WIDTH - total_w) // 2
     y = 66
     h = 42
 
     for i, title in enumerate(TABS):
-        rect = pygame.Rect(start_x + i * (tab_w + 16), y, tab_w, h)
+        rect = pygame.Rect(start_x + i * (tab_w + 12), y, tab_w, h)
         is_active = (i == tab_index)
 
         bg_col = (20, 28, 44) if is_active else (15, 20, 32)
@@ -825,6 +838,150 @@ def draw_right_card():
         screen.blit(font_small.render("Select a game to inspect specs.", True, TEXT_MUTED), (992, y))
 
 
+def workspace_button(rect, label, primary=False):
+    pygame.draw.rect(screen, PLAY_CYAN if primary else (24, 34, 52), rect, border_radius=8)
+    if not primary:
+        pygame.draw.rect(screen, (45, 65, 90), rect, width=1, border_radius=8)
+    ink = BG_COLOR if primary else TEXT_WHITE
+    surface = font_btn.render(label, True, ink)
+    screen.blit(surface, (rect.centerx - surface.get_width() // 2,
+                          rect.centery - surface.get_height() // 2))
+
+
+def clipped(text, font, width):
+    text = str(text)
+    while text and font.size(text)[0] > width:
+        text = text[:-1]
+    return text if text else ""
+
+
+def draw_workspace():
+    panel = pygame.Rect(25, 120, 1230, 575)
+    pygame.draw.rect(screen, PANEL_BG, panel, border_radius=14)
+    pygame.draw.rect(screen, PANEL_BORDER, panel, width=1, border_radius=14)
+    if tab_index == 0:
+        screen.blit(font_hero_title.render("Local Games", True, TEXT_WHITE), (48, 142))
+        screen.blit(font_small.render("Browse files on this cloud desktop. Select a Windows .exe to run with Wine and the game GPU.", True, TEXT_MUTED), (48, 172))
+        roots = [("BUILDS", local_tools.BUILDS), ("DOWNLOADS", local_tools.DOWNLOADS),
+                 ("GAMES", local_tools.HOME / "Games"), ("HOME", local_tools.HOME)]
+        for i, (label, _) in enumerate(roots):
+            workspace_button(pygame.Rect(48 + i * 132, 205, 120, 34), label)
+        workspace_button(pygame.Rect(590, 205, 110, 34), "UP")
+        workspace_button(pygame.Rect(710, 205, 110, 34), "REFRESH")
+        screen.blit(font_body.render(clipped(explorer_folder, font_body, 1110), True, CYAN_NEON), (48, 255))
+        try:
+            listing = local_tools.entries(explorer_folder)
+            visible = listing[explorer_scroll:explorer_scroll + 10]
+            for i, path in enumerate(visible):
+                y = 286 + i * 34
+                row = pygame.Rect(48, y, 1160, 31)
+                selected = path == explorer_selected
+                pygame.draw.rect(screen, (29, 47, 66) if selected else (20, 28, 42), row, border_radius=5)
+                kind = "FOLDER" if path.is_dir() else path.suffix.upper().lstrip(".")
+                screen.blit(font_body.render(clipped(path.name, font_body, 850), True,
+                                             CYAN_NEON if selected else TEXT_WHITE), (60, y + 8))
+                screen.blit(font_small.render(kind, True, TEXT_MUTED), (1110, y + 8))
+            screen.blit(font_small.render(f"{len(listing)} items  |  Mouse wheel to scroll  |  Select an EXE, then Run", True, TEXT_MUTED), (48, 644))
+        except OSError as exc:
+            screen.blit(font_body.render(str(exc)[:100], True, DANGER_RED), (48, 288))
+        selected_torrent = explorer_selected and explorer_selected.suffix.lower() == ".torrent"
+        workspace_button(pygame.Rect(1020, 205, 188, 34),
+                         "START TORRENT" if selected_torrent else "RUN SELECTED .EXE", True)
+    elif tab_index == 1:
+        screen.blit(font_hero_title.render("Built-in Browser", True, TEXT_WHITE), (48, 142))
+        screen.blit(font_body.render("Open the browser inside the streamed desktop to download your test builds and assets.", True, TEXT_MUTED), (48, 182))
+        screen.blit(font_body.render("Browser downloads are saved in /home/gamer/Downloads.", True, CYAN_NEON), (48, 212))
+        workspace_button(pygame.Rect(48, 270, 240, 48), "OPEN WEB BROWSER", True)
+        screen.blit(font_small.render("Use Downloads for direct URLs and torrents. The browser supports ordinary web downloads.", True, TEXT_MUTED), (48, 341))
+    elif tab_index == 2:
+        screen.blit(font_hero_title.render("Download Manager", True, TEXT_WHITE), (48, 142))
+        screen.blit(font_body.render("Direct HTTP(S) files, magnet links, and .torrent files download to /home/gamer/Downloads.", True, TEXT_MUTED), (48, 182))
+        field = pygame.Rect(48, 222, 920, 42)
+        pygame.draw.rect(screen, (10, 16, 28), field, border_radius=8)
+        pygame.draw.rect(screen, CYAN_NEON if download_editing else PANEL_BORDER, field, width=1, border_radius=8)
+        prompt = download_input or "Click and paste a URL, magnet link, or .torrent file path"
+        screen.blit(font_body.render(clipped(prompt, font_body, 880), True,
+                                     TEXT_WHITE if download_input else TEXT_MUTED), (60, 236))
+        workspace_button(pygame.Rect(980, 222, 228, 42), "START DOWNLOAD", True)
+        workspace_button(pygame.Rect(48, 284, 180, 38), "STOP TRANSFER")
+        workspace_button(pygame.Rect(240, 284, 220, 38), "OPEN DOWNLOADS")
+        screen.blit(font_title.render(f"STATUS: {download_manager.state}", True, CYAN_NEON), (48, 360))
+        screen.blit(font_body.render(clipped(download_manager.source, font_body, 1080), True, TEXT_WHITE), (48, 396))
+        track = pygame.Rect(48, 430, 1160, 14)
+        pygame.draw.rect(screen, (28, 39, 57), track, border_radius=7)
+        fill = round(1160 * min(100, max(0, download_manager.percent)) / 100)
+        if fill:
+            pygame.draw.rect(screen, CYAN_NEON, pygame.Rect(48, 430, fill, 14), border_radius=7)
+        screen.blit(font_body.render(f"{download_manager.percent:.1f}%   {download_manager.speed}   ETA {download_manager.eta}", True, TEXT_WHITE), (48, 465))
+        screen.blit(font_small.render(clipped(download_manager.detail, font_small, 1100), True, TEXT_MUTED), (48, 503))
+    screen.blit(font_small.render(clipped(message, font_small, 1160), True, CYAN_NEON), (48, 672))
+
+
+def handle_workspace_click(pos):
+    global explorer_folder, explorer_selected, explorer_scroll, download_editing, message, browser_proc, tab_index
+    mx, my = pos
+    if tab_index == 0:
+        if 205 <= my <= 239:
+            roots = (local_tools.BUILDS, local_tools.DOWNLOADS, local_tools.HOME / "Games", local_tools.HOME)
+            for i, root in enumerate(roots):
+                if 48 + i * 132 <= mx < 168 + i * 132:
+                    explorer_folder, explorer_selected, explorer_scroll = root, None, 0
+                    root.mkdir(parents=True, exist_ok=True)
+                    return
+            if 590 <= mx <= 700:
+                explorer_folder, explorer_selected, explorer_scroll = explorer_folder.parent, None, 0
+                return
+            if 710 <= mx <= 820:
+                explorer_selected, explorer_scroll = None, 0
+                return
+            if 1020 <= mx <= 1208 and explorer_selected:
+                if explorer_selected.is_file() and explorer_selected.suffix.lower() == ".torrent":
+                    try:
+                        download_manager.start(str(explorer_selected))
+                        tab_index = 2
+                        message = "Torrent started."
+                    except (OSError, ValueError, RuntimeError) as exc:
+                        message = str(exc)
+                elif explorer_selected.is_file() and explorer_selected.suffix.lower() == ".exe":
+                    message = launch_game({"title": explorer_selected.stem, "action": "local-exe",
+                                           "install_path": str(explorer_selected), "store": "Local Game"})
+                else:
+                    message = "Select a Windows .exe file first."
+                return
+        if 286 <= my < 626:
+            try:
+                listing = local_tools.entries(explorer_folder)
+                idx = explorer_scroll + (my - 286) // 34
+                if 0 <= idx < len(listing):
+                    path = listing[idx]
+                    if path.is_dir():
+                        explorer_folder, explorer_selected, explorer_scroll = path, None, 0
+                    else:
+                        explorer_selected = path
+            except OSError as exc:
+                message = str(exc)[:90]
+    elif tab_index == 1 and 48 <= mx <= 288 and 270 <= my <= 318:
+        try:
+            if browser_proc is None or browser_proc.poll() is not None:
+                browser_proc = local_tools.launch_browser(game_env())
+            message = "Browser opened on the cloud desktop."
+        except (OSError, RuntimeError) as exc:
+            message = str(exc)
+    elif tab_index == 2:
+        download_editing = 48 <= mx <= 968 and 222 <= my <= 264
+        if 980 <= mx <= 1208 and 222 <= my <= 264:
+            try:
+                download_manager.start(download_input)
+                message = "Download started."
+            except (OSError, ValueError, RuntimeError) as exc:
+                message = str(exc)
+        elif 48 <= mx <= 228 and 284 <= my <= 322:
+            message = "Stopping transfer." if download_manager.cancel() else "No active transfer."
+        elif 240 <= mx <= 460 and 284 <= my <= 322:
+            explorer_folder, explorer_selected, explorer_scroll = local_tools.DOWNLOADS, None, 0
+            tab_index = 0
+
+
 def handle_click(pos: Tuple[int, int]):
     global tab_index, selected_game_index, carousel_page, filter_mode, message
     mx, my = pos
@@ -838,16 +995,20 @@ def handle_click(pos: Tuple[int, int]):
 
     # 2. Platform Tabs (y: 66-108)
     if 66 <= my <= 108:
-        tab_w = 210
-        total_w = 2 * tab_w + 16
+        tab_w = 180
+        total_w = len(TABS) * tab_w + (len(TABS) - 1) * 12
         start_x = (WIDTH - total_w) // 2
-        for i in range(2):
-            t_rect = pygame.Rect(start_x + i * (tab_w + 16), 66, tab_w, 42)
+        for i in range(len(TABS)):
+            t_rect = pygame.Rect(start_x + i * (tab_w + 12), 66, tab_w, 42)
             if t_rect.collidepoint((mx, my)):
                 tab_index = i
                 selected_game_index = 0
                 carousel_page = 0
                 return
+
+    if tab_index != 3:
+        handle_workspace_click(pos)
+        return
 
     # 3. Left Panel Controls
     if 25 <= mx <= 270:
@@ -935,6 +1096,7 @@ def handle_click(pos: Tuple[int, int]):
 
 def main():
     global display, tab_index, selected_game_index, carousel_page, message
+    global explorer_scroll, explorer_selected, download_input, download_editing, explorer_folder
     if not pygame:
         print("Pygame is required to run dev_launcher.")
         return
@@ -947,10 +1109,13 @@ def main():
         draw_corner_brackets()
         draw_header()
         draw_tabs()
-        draw_left_card()
-        draw_center_hero()
-        draw_quick_launch()
-        draw_right_card()
+        if tab_index == 3:
+            draw_left_card()
+            draw_center_hero()
+            draw_quick_launch()
+            draw_right_card()
+        else:
+            draw_workspace()
 
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
@@ -962,7 +1127,65 @@ def main():
                 my = round(event.pos[1] * HEIGHT / max(1, display.get_height()))
                 print(f"[Input] Mouse click at ({mx}, {my})", flush=True)
                 handle_click((mx, my))
+            elif event.type == pygame.MOUSEWHEEL and tab_index == 0:
+                try:
+                    explorer_scroll = max(0, min(max(0, len(local_tools.entries(explorer_folder)) - 10),
+                                                 explorer_scroll - event.y * 3))
+                except OSError:
+                    explorer_scroll = 0
             elif event.type == pygame.KEYDOWN:
+                if tab_index == 2 and download_editing:
+                    if event.key == pygame.K_RETURN:
+                        try:
+                            download_manager.start(download_input)
+                            message = "Download started."
+                        except (OSError, ValueError, RuntimeError) as exc:
+                            message = str(exc)
+                        download_editing = False
+                    elif event.key == pygame.K_BACKSPACE:
+                        download_input = download_input[:-1]
+                    elif event.key == pygame.K_v and event.mod & pygame.KMOD_CTRL:
+                        try:
+                            import tkinter
+                            clip = tkinter.Tk()
+                            clip.withdraw()
+                            download_input += clip.clipboard_get()[:2048]
+                            clip.destroy()
+                        except Exception:
+                            message = "Clipboard unavailable; type the link."
+                    elif event.unicode and event.unicode.isprintable():
+                        download_input += event.unicode
+                    continue
+                if tab_index == 0 and event.key == pygame.K_BACKSPACE:
+                    explorer_folder = explorer_folder.parent
+                    explorer_scroll = 0
+                    continue
+                if tab_index == 0 and event.key in (pygame.K_UP, pygame.K_DOWN, pygame.K_RETURN):
+                    try:
+                        listing = local_tools.entries(explorer_folder)
+                        if event.key in (pygame.K_UP, pygame.K_DOWN) and listing:
+                            current = listing.index(explorer_selected) if explorer_selected in listing else -1
+                            step = -1 if event.key == pygame.K_UP else 1
+                            explorer_selected = listing[max(0, min(len(listing) - 1, current + step))]
+                            explorer_scroll = max(0, min(explorer_scroll, listing.index(explorer_selected)))
+                            explorer_scroll = max(explorer_scroll, listing.index(explorer_selected) - 9)
+                        elif event.key == pygame.K_RETURN and explorer_selected:
+                            if explorer_selected.is_dir():
+                                explorer_folder = explorer_selected
+                                explorer_selected, explorer_scroll = None, 0
+                            elif explorer_selected.suffix.lower() == ".exe":
+                                message = launch_game({"title": explorer_selected.stem,
+                                                       "action": "local-exe",
+                                                       "install_path": str(explorer_selected),
+                                                       "store": "Local Game"})
+                            elif explorer_selected.suffix.lower() == ".torrent":
+                                download_manager.start(str(explorer_selected))
+                                tab_index = 2
+                    except (OSError, ValueError, RuntimeError) as exc:
+                        message = str(exc)[:100]
+                    continue
+                if tab_index != 3 and event.key != pygame.K_TAB:
+                    continue
                 games = get_current_games_list()
                 total_games = len(games)
                 if event.key in (pygame.K_LEFT, pygame.K_a):

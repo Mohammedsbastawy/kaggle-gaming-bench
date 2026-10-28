@@ -8,6 +8,12 @@ mkdir -p "$BENCH/logs" "$BUILDS" /tmp/ea-store
 
 export DEBIAN_FRONTEND=noninteractive
 export PATH="/usr/games:/usr/local/bin:/usr/bin:$PATH"
+SETUP_PROFILE="${GAMELAB_SETUP_PROFILE:-local}"
+if [ "$SETUP_PROFILE" != local ] && [ "$SETUP_PROFILE" != full ]; then
+    echo "Unknown GAMELAB_SETUP_PROFILE: $SETUP_PROFILE" >&2
+    exit 2
+fi
+echo "▶ Setup profile: $SETUP_PROFILE"
 
 echo "=========================================================="
 echo "    7BZ DEV CLOUD GAME BOOTSTRAPPER                       "
@@ -60,6 +66,20 @@ apt_install "core desktop" \
     xvfb openbox tint2 xterm pulseaudio pulseaudio-utils xauth dbus-x11 \
     libgl1-mesa-dri libgbm1 libpixman-1-0 libxkbcommon0 mesa-utils x11-utils vulkan-tools \
     xdotool xinput wmctrl wget curl cabextract p7zip-full zstd winetricks python3-pygame python3-aiohttp
+
+# Developer desktop: direct downloads/torrents and a native browser in the stream.
+apt_install "download manager" aria2
+apt_install "desktop browser" chromium
+if ! command -v chromium >/dev/null 2>&1 && ! command -v chromium-browser >/dev/null 2>&1; then
+    apt_install "fallback desktop browser" firefox-esr
+fi
+if ! command -v chromium >/dev/null 2>&1 && ! command -v chromium-browser >/dev/null 2>&1 && ! command -v firefox >/dev/null 2>&1; then
+    CHROME_DEB=/tmp/google-chrome-stable_current_amd64.deb
+    wget -q https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb -O "$CHROME_DEB" || true
+    if [ -f "$CHROME_DEB" ] && [ "$(stat -c%s "$CHROME_DEB" 2>/dev/null || echo 0)" -gt 50000000 ]; then
+        apt_install "Chrome desktop browser" "$CHROME_DEB"
+    fi
+fi
 
 # Build tools (isolated so multilib issues don't block core)
 apt_install "build tools" git make gcc
@@ -143,14 +163,22 @@ if [ ! -d /opt/gamelab-vkd3d ]; then
 fi
 
 # 5. Extra libraries for Lutris and Wine Gecko
-apt_install "extra libraries" python3-tk python3.12 python3-dbus python3-gi python3-yaml python3-lxml python3-requests python3-pil
+apt_install "desktop clipboard" python3-tk
+if [ "$SETUP_PROFILE" = full ]; then
+    apt_install "storefront libraries" python3.12 python3-dbus python3-gi python3-yaml python3-lxml python3-requests python3-pil
+fi
 apt-get install -y --no-install-recommends -o DPkg::Lock::Timeout=120 wine-gecko 2>/dev/null || true
 
 # 6. Python streaming, interface and gaming packages
 python3 -m pip install --no-cache-dir \
-    'selkies[jupyter]==2.1.0' 'pygame==2.6.1' 'psutil' 'legendary-gl'
+    'selkies[jupyter]==2.1.0' 'pygame==2.6.1' 'psutil'
+if [ "$SETUP_PROFILE" = full ]; then
+    python3 -m pip install --no-cache-dir 'legendary-gl'
+fi
 
-# 7. Steam installation (Valve official deb)
+# 7. Optional storefront suite. The local developer desktop needs none of it.
+if [ "$SETUP_PROFILE" = full ]; then
+# Steam installation (Valve official deb)
 STEAM_DEB="/tmp/steam_latest.deb"
 if [ ! -f "$STEAM_DEB" ] || [ $(stat -c%s "$STEAM_DEB" 2>/dev/null || echo 0) -lt 1000000 ]; then
     wget -q https://repo.steampowered.com/steam/archive/stable/steam_latest.deb -O "$STEAM_DEB" || true
@@ -178,6 +206,8 @@ apt_install "minigalaxy" minigalaxy
 EA_EXE="/tmp/ea-store/EAappInstaller.exe"
 if [ ! -f "$EA_EXE" ] || [ $(stat -c%s "$EA_EXE" 2>/dev/null || echo 0) -lt 1000000 ]; then
     wget -q https://origin-a.akamaihd.net/EA-Desktop-Client-Download/installer-releases/EAappInstaller.exe -O "$EA_EXE" || true
+fi
+
 fi
 
 # 11. Configure unprivileged gamer user
@@ -216,7 +246,9 @@ if [ ! -d "$WINE_GE_DIR/Wine-GE-Proton8-26" ] && [ ! -d "$WINE_GE_DIR/lutris-GE-
 fi
 
 # 13. Pre-configure Heroic default settings
-python3 "$BENCH/fix_heroic_config.py" || true
+if [ "$SETUP_PROFILE" = full ]; then
+    python3 "$BENCH/fix_heroic_config.py" || true
+fi
 
 # 14. Pre-initialize clean 64-bit Wine prefix with Wine-GE
 if [ -x "$WINE_GE_DIR/Wine-GE-Proton8-26/bin/wineboot" ]; then

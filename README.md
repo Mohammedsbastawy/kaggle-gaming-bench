@@ -52,6 +52,10 @@ lock during the live check. See [mouse input diagnosis](MOUSE_INPUT.md).
 
 ## Storefront Integration & WineD3D
 
+The default dashboard opens on **Local Games**. Browse `/tmp/game-builds`, `/home/gamer/Downloads`, or any directory under the cloud desktop home and select a Windows `.exe`. **Run Selected .EXE** invokes the same `gpu_runtime.py` Wine runner and probed NVIDIA graphics path used for Legendary games, with the executable's own directory as its working directory. No storefront or launcher account is needed for local builds. Upload complete game folders, including DLLs and assets, rather than only the executable.
+
+The **Browser** tab opens a native browser window on the streamed desktop. Browser downloads go to `/home/gamer/Downloads`. The **Downloads** tab uses aria2 for direct HTTP(S) links, magnet links, and `.torrent` files. Select a `.torrent` in Local Games to start it. Transfers are resumable, with progress, speed, ETA, and stop controls. Game compatibility still depends on the build's Windows dependencies and the live Kaggle GPU/runtime; a successful process launch alone does not prove in-game performance.
+
 * **Epic Games Dual Frontends**: 
   * **Heroic Games Launcher**: Full graphical Electron UI for library browsing and OAuth authentication. DXVK is enabled only when its NVIDIA Vulkan path passes the runtime probe.
   * **Legendary CLI**: Fast, terminal-based launcher using the measured NVIDIA renderer when available. CPU WineD3D is available by explicit opt-in for lightweight titles.
