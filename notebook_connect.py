@@ -44,8 +44,9 @@ document.getElementById('kaggle-open').onclick = function () {
     const raw = document.getElementById('kaggle-base').value.trim();
     if (!raw) throw new Error('Please paste your URL.');
     const u = new URL(raw);
-    let p = u.pathname.replace(/\/(tree|lab|notebooks)(\/.*)?$/, '/');
+    let p = u.pathname.replace(/\/(tree|lab|notebooks)(\/.*)?$/, '');
     if (!p.endsWith('/')) p += '/';
+    if (!p.endsWith('/proxy/')) p += 'proxy/';
     u.pathname = p + 'proxy/__STREAM_PORT__/';
     const target = u.toString();
     document.getElementById('kaggle-result').textContent = 'Opening authenticated Jupyter proxy route...';
