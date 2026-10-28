@@ -1540,6 +1540,7 @@ def draw_epic_login_modal():
 def main():
     global display, screen, clock, tab_index, selected_game_index, carousel_page, message
     global explorer_scroll, explorer_selected, download_input, download_editing, explorer_folder
+    global downloads_scroll, epic_login_modal, epic_auth_code_input
     if not pygame or screen is None:
         if not init_graphics():
             print("Pygame display is required to run dev_launcher.", flush=True)
