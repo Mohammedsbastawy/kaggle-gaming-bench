@@ -11,7 +11,9 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import re
 import shutil
+import subprocess
 import threading
 import time
 from typing import Any, Dict, List, Optional, Tuple
@@ -67,14 +69,28 @@ def get_epic_user() -> Dict[str, Any]:
 def login_legendary(auth_code: str) -> Tuple[bool, str]:
     """Authenticates legendary with Epic Games using an authorization code or sid."""
     auth_code = auth_code.strip().strip('"').strip("'")
-    if "authorizationCode" in auth_code:
+
+    # 1. Extract authorizationCode from JSON if full response pasted
+    match = re.search(r'["\']?authorizationCode["\']?\s*[:=]\s*["\']?([a-f0-9]{32})["\']?', auth_code, re.IGNORECASE)
+    if match:
+        auth_code = match.group(1)
+    elif "code=" in auth_code:
+        auth_code = auth_code.split("code=")[-1].split("&")[0].strip()
+    elif "{" in auth_code and "}" in auth_code:
         try:
             data = json.loads(auth_code)
             auth_code = data.get("authorizationCode", auth_code)
         except Exception:
             pass
-    if "code=" in auth_code:
-        auth_code = auth_code.split("code=")[-1].split("&")[0]
+
+    # 2. Extract 32-character hex code anywhere in text
+    hex_match = re.search(r'\b([a-f0-9]{32})\b', auth_code, re.IGNORECASE)
+    if hex_match:
+        auth_code = hex_match.group(1)
+
+    auth_code = auth_code.strip()
+    if not auth_code or len(auth_code) < 16:
+        return False, "Invalid authorization code format. Please paste the 32-character code."
 
     is_root = (os.getuid() == 0) if hasattr(os, "getuid") else False
     prefix = ["runuser", "-u", "gamer", "--"] if is_root else []
@@ -91,9 +107,9 @@ def login_legendary(auth_code: str) -> Tuple[bool, str]:
         if res.returncode == 0 or "Successfully" in output or "Logged in" in output:
             subprocess.run(prefix + ["legendary", "list-games"], capture_output=True, timeout=60, env=os.environ.copy())
             return True, "Successfully logged in to Epic Games!"
-        return False, output.strip()[:120] if output.strip() else "Authentication failed."
+        return False, output.strip()[:140] if output.strip() else "Authentication failed."
     except Exception as exc:
-        return False, str(exc)[:100]
+        return False, str(exc)[:120]
 
 
 def sync_legendary_library() -> Tuple[bool, str]:

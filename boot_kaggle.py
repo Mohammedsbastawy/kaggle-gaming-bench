@@ -51,11 +51,11 @@ subprocess.run(["chmod", "644", str(BENCH / "nvidia-Xauthority")], check=False)
 subprocess.run(["chown", "-R", "gamer:gamer", "/home/gamer"], check=False)
 subprocess.run(["chmod", "777", str(LOGS)], check=False)
 
-# Ensure archive tools (7z, unrar, zip) are installed
-if not shutil.which("7z") and not shutil.which("unrar"):
-    print("▶ Ensuring archive extraction tools (p7zip-full, unrar-free)...", flush=True)
+# Ensure archive tools and clipboard tools (7z, unrar, zip, xclip, xsel) are installed
+if not shutil.which("7z") or not shutil.which("xclip"):
+    print("▶ Ensuring system utilities (p7zip-full, unrar-free, xclip, xsel)...", flush=True)
     subprocess.run(["apt-get", "install", "-y", "--no-install-recommends", "-o", "DPkg::Lock::Timeout=60",
-                    "p7zip-full", "unrar-free", "zip", "unzip"], check=False)
+                    "p7zip-full", "unrar-free", "zip", "unzip", "xclip", "xsel"], check=False)
 
 # Ensure desktop browser (Google Chrome Stable native deb) is installed
 def has_working_browser():

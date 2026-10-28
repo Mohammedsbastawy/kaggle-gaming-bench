@@ -355,7 +355,7 @@ epic_login_modal = False
 epic_auth_code_input = ""
 epic_auth_editing = False
 epic_auth_status = ""
-EPIC_AUTH_URL = "https://www.epicgames.com/id/api/redirect?clientId=34a02cf8f4414e29b159218764c3fa0a&responseType=code"
+EPIC_AUTH_URL = "https://legendary.gl/epiclogin"
 
 
 def submit_epic_login():
@@ -1304,17 +1304,8 @@ def handle_click(pos: Tuple[int, int]):
             return
         # Copy link (565 to 740, y: 222 to 260)
         if 565 <= mx <= 740 and 222 <= my <= 260:
-            try:
-                import tkinter
-                t = tkinter.Tk()
-                t.withdraw()
-                t.clipboard_clear()
-                t.clipboard_append(EPIC_AUTH_URL)
-                t.update()
-                t.destroy()
-                epic_auth_status = "Login URL copied to clipboard!"
-            except Exception:
-                epic_auth_status = "Login URL: epicgames.com/id/api/redirect"
+            local_tools.set_clipboard_text(EPIC_AUTH_URL)
+            epic_auth_status = f"URL copied to clipboard: {EPIC_AUTH_URL}"
             return
         # Input box (265 to 1015, y: 344 to 386)
         if 265 <= mx <= 1015 and 344 <= my <= 386:
@@ -1326,15 +1317,12 @@ def handle_click(pos: Tuple[int, int]):
             return
         # Paste button (495 to 655, y: 404 to 446)
         if 495 <= mx <= 655 and 404 <= my <= 446:
-            try:
-                import tkinter
-                t = tkinter.Tk()
-                t.withdraw()
-                epic_auth_code_input = t.clipboard_get().strip()
-                t.destroy()
+            clip_val = local_tools.get_clipboard_text()
+            if clip_val:
+                epic_auth_code_input = clip_val
                 epic_auth_status = "Code pasted from clipboard."
-            except Exception:
-                epic_auth_status = "Clipboard empty; please paste with Ctrl+V."
+            else:
+                epic_auth_status = "Clipboard empty. Copy code from browser or paste in Selkies sidebar."
             return
         # Cancel button (675 to 795, y: 404 to 446)
         if 675 <= mx <= 795 and 404 <= my <= 446:
@@ -1540,7 +1528,7 @@ def draw_epic_login_modal():
 def main():
     global display, screen, clock, tab_index, selected_game_index, carousel_page, message
     global explorer_scroll, explorer_selected, download_input, download_editing, explorer_folder
-    global downloads_scroll, epic_login_modal, epic_auth_code_input
+    global downloads_scroll, epic_login_modal, epic_auth_code_input, epic_auth_status
     if not pygame or screen is None:
         if not init_graphics():
             print("Pygame display is required to run dev_launcher.", flush=True)
@@ -1597,14 +1585,10 @@ def main():
                     elif event.key == pygame.K_BACKSPACE:
                         epic_auth_code_input = epic_auth_code_input[:-1]
                     elif event.key == pygame.K_v and event.mod & pygame.KMOD_CTRL:
-                        try:
-                            import tkinter
-                            clip = tkinter.Tk()
-                            clip.withdraw()
-                            epic_auth_code_input = clip.clipboard_get().strip()
-                            clip.destroy()
-                        except Exception:
-                            pass
+                        clip_val = local_tools.get_clipboard_text()
+                        if clip_val:
+                            epic_auth_code_input = clip_val
+                            epic_auth_status = "Code pasted from clipboard (Ctrl+V)."
                     elif event.unicode and event.unicode.isprintable():
                         epic_auth_code_input += event.unicode
                     continue
@@ -1620,14 +1604,9 @@ def main():
                     elif event.key == pygame.K_BACKSPACE:
                         download_input = download_input[:-1]
                     elif event.key == pygame.K_v and event.mod & pygame.KMOD_CTRL:
-                        try:
-                            import tkinter
-                            clip = tkinter.Tk()
-                            clip.withdraw()
-                            download_input += clip.clipboard_get()[:2048]
-                            clip.destroy()
-                        except Exception:
-                            message = "Clipboard unavailable; type the link."
+                        clip_val = local_tools.get_clipboard_text()
+                        if clip_val:
+                            download_input += clip_val[:2048]
                     elif event.unicode and event.unicode.isprintable():
                         download_input += event.unicode
                     continue

@@ -454,3 +454,117 @@ class ExtractionManager:
                 self.state = "Stopped"
                 return True
             return False
+
+
+def get_clipboard_text() -> str:
+    """Read clipboard text reliably across X11, Selkies, xclip, xsel, and Tkinter."""
+    env = os.environ.copy()
+    env.setdefault("DISPLAY", ":1")
+    if Path("/tmp/kaggle-game-dev-bench/nvidia-Xauthority").is_file():
+        env["XAUTHORITY"] = "/tmp/kaggle-game-dev-bench/nvidia-Xauthority"
+
+    # 1. Try xclip (handles UTF8_STRING and multiple selections)
+    for sel in ("clipboard", "primary"):
+        try:
+            res = subprocess.run(
+                ["xclip", "-selection", sel, "-o"],
+                capture_output=True, text=True, timeout=1.5,
+                env=env
+            )
+            if res.returncode == 0 and res.stdout.strip():
+                return res.stdout.strip()
+        except Exception:
+            pass
+
+    # 2. Try xsel
+    for flag in ("--clipboard", "--primary"):
+        try:
+            res = subprocess.run(
+                ["xsel", flag, "--output"],
+                capture_output=True, text=True, timeout=1.5,
+                env=env
+            )
+            if res.returncode == 0 and res.stdout.strip():
+                return res.stdout.strip()
+        except Exception:
+            pass
+
+    # 3. Try tkinter with UTF8_STRING then fallback to standard STRING
+    try:
+        import tkinter
+        t = tkinter.Tk()
+        t.withdraw()
+        val = ""
+        for sel in ("CLIPBOARD", "PRIMARY"):
+            for typ in ("UTF8_STRING", "STRING"):
+                try:
+                    val = t.selection_get(selection=sel, type=typ)
+                    if val.strip():
+                        break
+                except Exception:
+                    pass
+            if val.strip():
+                break
+        if not val.strip():
+            try:
+                val = t.clipboard_get()
+            except Exception:
+                pass
+        t.destroy()
+        if val.strip():
+            return val.strip()
+    except Exception:
+        pass
+
+    return ""
+
+
+def set_clipboard_text(text: str) -> bool:
+    """Set X11 clipboard text using xclip, xsel, and tkinter."""
+    success = False
+    env = os.environ.copy()
+    env.setdefault("DISPLAY", ":1")
+    if Path("/tmp/kaggle-game-dev-bench/nvidia-Xauthority").is_file():
+        env["XAUTHORITY"] = "/tmp/kaggle-game-dev-bench/nvidia-Xauthority"
+
+    # 1. Try xclip
+    try:
+        p = subprocess.Popen(
+            ["xclip", "-selection", "clipboard"],
+            stdin=subprocess.PIPE,
+            env=env
+        )
+        p.communicate(input=text.encode("utf-8"), timeout=1.5)
+        if p.returncode == 0:
+            success = True
+    except Exception:
+        pass
+
+    # 2. Try xsel
+    try:
+        p = subprocess.Popen(
+            ["xsel", "--clipboard", "--input"],
+            stdin=subprocess.PIPE,
+            env=env
+        )
+        p.communicate(input=text.encode("utf-8"), timeout=1.5)
+        if p.returncode == 0:
+            success = True
+    except Exception:
+        pass
+
+    # 3. Try tkinter
+    try:
+        import tkinter
+        t = tkinter.Tk()
+        t.withdraw()
+        t.clipboard_clear()
+        t.clipboard_append(text)
+        t.update()
+        t.destroy()
+        success = True
+    except Exception:
+        pass
+
+    return success
+

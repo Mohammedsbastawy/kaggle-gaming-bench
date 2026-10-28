@@ -163,7 +163,7 @@ if [ ! -d /opt/gamelab-vkd3d ]; then
 fi
 
 # 5. Extra libraries for Lutris and Wine Gecko
-apt_install "desktop clipboard" python3-tk
+apt_install "desktop clipboard" python3-tk xclip xsel
 if [ "$SETUP_PROFILE" = full ]; then
     apt_install "storefront libraries" python3.12 python3-dbus python3-gi python3-yaml python3-lxml python3-requests python3-pil
 fi
