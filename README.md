@@ -4,7 +4,7 @@ A controller-first cloud gaming and game-development console running on Kaggle w
 
 Start with [PROJECT_GUIDE.md](PROJECT_GUIDE.md) for the Git-based startup flow, setup profiles, architecture, validation, and rollback instructions.
 
-[![Kaggle Notebook](https://img.shields.io/badge/Kaggle-Interactive%20GPU%20Bench-20BEFF?logo=kaggle)](https://www.kaggle.com/code/mohammedbastawy/interactive-gpu-game-development-bench-20261023)
+[![Kaggle Notebook](https://img.shields.io/badge/Kaggle-Interactive%20GPU%20Bench-20BEFF?logo=kaggle)](https://www.kaggle.com/code/mbastawy99/interactive-gpu-game-development-bench-20261023)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 ---
