@@ -72,6 +72,9 @@ export CUDA_VISIBLE_DEVICES="$ENCODER_DEVICE"
 export SELKIES_ALLOWED_ORIGINS="$ORIGIN"
 export SELKIES_JS_SOCKET_PATH="$BENCH/direct-stream-sockets"
 mkdir -p "$SELKIES_JS_SOCKET_PATH" "$BENCH/logs"
+chmod 777 "$BENCH/logs" 2>/dev/null || true
+chmod 777 "$SELKIES_JS_SOCKET_PATH" 2>/dev/null || true
+chown -R gamer:gamer /home/gamer 2>/dev/null || true
 test -f "$BENCH/web-root/index.html"
 # Keep the system Openbox settings, with a rule for the game's Wine window.
 # EWMH fullscreen removes both the title bar and tint2's reserved screen area.

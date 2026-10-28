@@ -48,6 +48,8 @@ subprocess.run(["pkill", "-f", "dev_launcher.py"], check=False)
 subprocess.run(["chmod", "755", "/root"], check=False)
 subprocess.run(["chmod", "-R", "755", "/root/.local"], check=False)
 subprocess.run(["chmod", "644", str(BENCH / "nvidia-Xauthority")], check=False)
+subprocess.run(["chown", "-R", "gamer:gamer", "/home/gamer"], check=False)
+subprocess.run(["chmod", "777", str(LOGS)], check=False)
 
 # Ensure archive tools (7z, unrar, zip) are installed
 if not shutil.which("7z") and not shutil.which("unrar"):
@@ -56,10 +58,19 @@ if not shutil.which("7z") and not shutil.which("unrar"):
                     "p7zip-full", "unrar-free", "zip", "unzip"], check=False)
 
 # Ensure desktop browser is installed
-if not any(shutil.which(b) for b in ("chromium", "chromium-browser", "google-chrome", "firefox")):
+if not any(shutil.which(b) for b in ("chromium", "chromium-browser", "google-chrome-stable", "google-chrome", "firefox")):
     print("▶ Ensuring desktop browser (chromium)...", flush=True)
     subprocess.run(["apt-get", "install", "-y", "--no-install-recommends", "-o", "DPkg::Lock::Timeout=60",
-                    "chromium"], check=False)
+                    "chromium", "chromium-browser"], check=False)
+    if not any(shutil.which(b) for b in ("chromium", "chromium-browser", "google-chrome-stable", "google-chrome", "firefox")):
+        chrome_deb = Path("/tmp/google-chrome-stable_current_amd64.deb")
+        try:
+            print("▶ Downloading Google Chrome stable deb package...", flush=True)
+            urllib.request.urlretrieve("https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb", str(chrome_deb))
+            if chrome_deb.stat().st_size > 50000000:
+                subprocess.run(["apt-get", "install", "-y", "--no-install-recommends", "-o", "DPkg::Lock::Timeout=60", str(chrome_deb)], check=False)
+        except Exception as e:
+            print(f"Notice: Chrome fallback: {e}", flush=True)
 
 # Start live command bridge on port 9000
 bridge_script = BENCH / "remote_bridge.py"

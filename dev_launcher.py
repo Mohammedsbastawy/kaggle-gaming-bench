@@ -328,12 +328,14 @@ local_list: List[Dict[str, Any]] = []
 tab_index = TAB_EPIC
 explorer_folder = local_tools.BUILDS
 explorer_selected = None
+explorer_selected_paths = set()
 explorer_scroll = 0
 download_input = ""
 download_editing = False
 download_manager = local_tools.DownloadManager()
 extraction_manager = local_tools.ExtractionManager()
 downloads_selected = None
+downloads_selected_paths = set()
 downloads_scroll = 0
 browser_proc = None
 filter_mode = "ALL"       # "ALL" or "INSTALLED"
@@ -911,34 +913,61 @@ def draw_workspace():
                  ("GAMES", local_tools.HOME / "Games"), ("HOME", local_tools.HOME)]
         for i, (label, _) in enumerate(roots):
             workspace_button(pygame.Rect(48 + i * 132, 205, 120, 34), label)
-        workspace_button(pygame.Rect(590, 205, 110, 34), "UP")
-        workspace_button(pygame.Rect(710, 205, 110, 34), "REFRESH")
-        screen.blit(font_body.render(clipped(explorer_folder, font_body, 1110), True, CYAN_NEON), (48, 255))
+        workspace_button(pygame.Rect(590, 205, 90, 34), "UP")
+        workspace_button(pygame.Rect(690, 205, 105, 34), "REFRESH")
+        workspace_button(pygame.Rect(805, 205, 140, 34), "SELECT ALL")
+
+        sel_archives = [p for p in explorer_selected_paths if local_tools.is_archive(p)]
+        if not sel_archives and explorer_selected and local_tools.is_archive(explorer_selected):
+            sel_archives = [explorer_selected]
+
+        if sel_archives:
+            btn_label = f"EXTRACT ({len(sel_archives)} ARCHIVES)" if len(sel_archives) > 1 else "EXTRACT ARCHIVE"
+            btn_active = True
+        elif explorer_selected and explorer_selected.is_file() and explorer_selected.suffix.lower() == ".exe":
+            btn_label = "RUN SELECTED .EXE"
+            btn_active = True
+        else:
+            btn_label = "SELECT EXE / ARCHIVE"
+            btn_active = False
+
+        workspace_button(pygame.Rect(955, 205, 253, 34), btn_label, btn_active)
+        screen.blit(font_body.render(clipped(str(explorer_folder), font_body, 1110), True, CYAN_NEON), (48, 255))
         try:
             listing = local_tools.entries(explorer_folder)
             visible = listing[explorer_scroll:explorer_scroll + 10]
             for i, path in enumerate(visible):
                 y = 286 + i * 34
                 row = pygame.Rect(48, y, 1160, 31)
-                selected = path == explorer_selected
+                is_arch = local_tools.is_archive(path)
+                selected = (path in explorer_selected_paths) or (path == explorer_selected)
                 pygame.draw.rect(screen, (29, 47, 66) if selected else (20, 28, 42), row, border_radius=5)
+                if selected:
+                    pygame.draw.rect(screen, CYAN_NEON, row, width=1, border_radius=5)
+
+                if is_arch:
+                    chk_rect = pygame.Rect(58, y + 6, 18, 18)
+                    chk_color = CYAN_NEON if path in explorer_selected_paths else PANEL_BORDER
+                    pygame.draw.rect(screen, (10, 16, 28), chk_rect, border_radius=3)
+                    pygame.draw.rect(screen, chk_color, chk_rect, width=1, border_radius=3)
+                    if path in explorer_selected_paths:
+                        screen.blit(font_small.render("X", True, CYAN_NEON), (62, y + 7))
+
                 if path.is_dir():
                     kind = "FOLDER"
-                elif local_tools.is_archive(path):
-                    kind = "ARCHIVE (" + path.suffix.upper().lstrip(".") + ")"
+                elif is_arch:
+                    kind = local_tools.archive_tag(path)
                 else:
                     kind = path.suffix.upper().lstrip(".")
+
+                text_x = 86 if is_arch else 60
                 screen.blit(font_body.render(clipped(path.name, font_body, 850), True,
-                                             CYAN_NEON if selected else TEXT_WHITE), (60, y + 8))
-                screen.blit(font_small.render(kind, True, LIME_GREEN if "ARCHIVE" in kind else TEXT_MUTED), (1110, y + 8))
+                                             CYAN_NEON if selected else TEXT_WHITE), (text_x, y + 8))
+                screen.blit(font_small.render(kind, True, LIME_GREEN if ("ARCHIVE" in kind or "PART" in kind) else TEXT_MUTED), (1050, y + 8))
             ext_tag = f"  |  Extracting: {extraction_manager.state} ({extraction_manager.detail[:50]})" if extraction_manager.state != "Idle" else ""
-            screen.blit(font_small.render(f"{len(listing)} items  |  Wheel to scroll  |  Select an EXE, RAR or ZIP{ext_tag}", True, TEXT_MUTED), (48, 644))
+            screen.blit(font_small.render(f"{len(listing)} items  |  Wheel to scroll  |  Click archive to multi-select{ext_tag}", True, TEXT_MUTED), (48, 644))
         except OSError as exc:
             screen.blit(font_body.render(str(exc)[:100], True, DANGER_RED), (48, 288))
-        selected_torrent = explorer_selected and explorer_selected.suffix.lower() == ".torrent"
-        selected_archive = explorer_selected and local_tools.is_archive(explorer_selected)
-        btn_label = "EXTRACT ARCHIVE" if selected_archive else "RUN SELECTED .EXE"
-        workspace_button(pygame.Rect(980, 205, 228, 34), btn_label, True)
     elif tab_index == TAB_BROWSER:
         screen.blit(font_hero_title.render("Built-in Web Browser (Chromium)", True, TEXT_WHITE), (48, 142))
         screen.blit(font_body.render("Open Chromium inside the cloud desktop to download game builds, mods, and assets directly.", True, TEXT_MUTED), (48, 182))
@@ -972,17 +1001,28 @@ def draw_workspace():
 
         pygame.draw.line(screen, PANEL_BORDER, (48, 282), (WIDTH - 48, 282), 1)
 
-        screen.blit(font_title.render("DOWNLOADED FILES & RAR/ZIP EXTRACTOR (/home/gamer/Downloads)", True, TEXT_WHITE), (48, 294))
-        workspace_button(pygame.Rect(720, 289, 90, 30), "REFRESH")
+        screen.blit(font_title.render("DOWNLOADS & RAR/ZIP EXTRACTOR (/home/gamer/Downloads)", True, TEXT_WHITE), (48, 294))
+        workspace_button(pygame.Rect(570, 289, 90, 30), "REFRESH")
+        workspace_button(pygame.Rect(670, 289, 130, 30), "SELECT ALL")
 
-        sel_is_archive = downloads_selected and local_tools.is_archive(downloads_selected)
+        sel_archives = [p for p in downloads_selected_paths if local_tools.is_archive(p)]
+        if not sel_archives and downloads_selected and local_tools.is_archive(downloads_selected):
+            sel_archives = [downloads_selected]
         sel_is_exe = downloads_selected and downloads_selected.suffix.lower() == ".exe"
-        sel_is_torrent = downloads_selected and downloads_selected.suffix.lower() == ".torrent"
-        act_label = "EXTRACT ARCHIVE (.RAR/.ZIP)" if sel_is_archive else ("RUN .EXE" if sel_is_exe else ("START TORRENT" if sel_is_torrent else "SELECT ARCHIVE TO EXTRACT"))
-        act_active = bool(sel_is_archive or sel_is_exe or sel_is_torrent)
-        workspace_button(pygame.Rect(825, 289, 265, 30), act_label, act_active)
 
-        if extraction_manager.state == "Extracting":
+        if sel_archives:
+            act_label = f"EXTRACT ({len(sel_archives)} ARCHIVES)" if len(sel_archives) > 1 else "EXTRACT ARCHIVE (.RAR/.ZIP)"
+            act_active = True
+        elif sel_is_exe:
+            act_label = "RUN .EXE"
+            act_active = True
+        else:
+            act_label = "SELECT ARCHIVE(S) TO EXTRACT"
+            act_active = False
+
+        workspace_button(pygame.Rect(810, 289, 285, 30), act_label, act_active)
+
+        if extraction_manager.state.startswith("Extracting") or extraction_manager.is_busy():
             workspace_button(pygame.Rect(1105, 289, 103, 30), "CANCEL")
 
         try:
@@ -991,12 +1031,24 @@ def draw_workspace():
             for i, path in enumerate(visible):
                 y = 328 + i * 33
                 row = pygame.Rect(48, y, 1160, 30)
-                selected = path == downloads_selected
+                is_arch = local_tools.is_archive(path)
+                selected = (path in downloads_selected_paths) or (path == downloads_selected)
                 pygame.draw.rect(screen, (29, 47, 66) if selected else (20, 28, 42), row, border_radius=5)
+                if selected:
+                    pygame.draw.rect(screen, CYAN_NEON, row, width=1, border_radius=5)
+
+                if is_arch:
+                    chk_rect = pygame.Rect(58, y + 6, 18, 18)
+                    chk_color = CYAN_NEON if path in downloads_selected_paths else PANEL_BORDER
+                    pygame.draw.rect(screen, (10, 16, 28), chk_rect, border_radius=3)
+                    pygame.draw.rect(screen, chk_color, chk_rect, width=1, border_radius=3)
+                    if path in downloads_selected_paths:
+                        screen.blit(font_small.render("X", True, CYAN_NEON), (62, y + 7))
+
                 if path.is_dir():
                     tag = "FOLDER"
-                elif local_tools.is_archive(path):
-                    tag = "ARCHIVE (" + path.suffix.upper().lstrip(".") + ")"
+                elif is_arch:
+                    tag = local_tools.archive_tag(path)
                 else:
                     tag = path.suffix.upper().lstrip(".")
 
@@ -1013,13 +1065,14 @@ def draw_workspace():
                 except OSError:
                     pass
 
+                text_x = 86 if is_arch else 60
                 screen.blit(font_body.render(clipped(path.name, font_body, 800), True,
-                                             CYAN_NEON if selected else TEXT_WHITE), (60, y + 8))
+                                             CYAN_NEON if selected else TEXT_WHITE), (text_x, y + 8))
                 screen.blit(font_small.render(size_str, True, TEXT_MUTED), (920, y + 8))
-                screen.blit(font_small.render(tag, True, LIME_GREEN if "ARCHIVE" in tag else TEXT_MUTED), (1050, y + 8))
+                screen.blit(font_small.render(tag, True, LIME_GREEN if ("ARCHIVE" in tag or "PART" in tag) else TEXT_MUTED), (1040, y + 8))
 
-            info_line = f"{len(dl_items)} files  |  Click to select  |  EXTRACTION: {extraction_manager.state} ({extraction_manager.detail[:60]})"
-            screen.blit(font_small.render(info_line, True, CYAN_NEON if extraction_manager.state == "Extracting" else TEXT_MUTED), (48, 608))
+            info_line = f"{len(dl_items)} files  |  Click archive to check/uncheck  |  STATUS: {extraction_manager.state} ({extraction_manager.detail[:65]})"
+            screen.blit(font_small.render(info_line, True, CYAN_NEON if extraction_manager.state.startswith("Extracting") else TEXT_MUTED), (48, 608))
         except OSError as exc:
             screen.blit(font_body.render(str(exc)[:100], True, DANGER_RED), (48, 335))
 
@@ -1027,8 +1080,9 @@ def draw_workspace():
 
 
 def handle_workspace_click(pos):
-    global explorer_folder, explorer_selected, explorer_scroll, download_editing, message, browser_proc, tab_index
-    global downloads_selected, downloads_scroll
+    global explorer_folder, explorer_selected, explorer_selected_paths, explorer_scroll
+    global download_editing, message, browser_proc, tab_index
+    global downloads_selected, downloads_selected_paths, downloads_scroll
     mx, my = pos
     if tab_index == TAB_LOCAL:
         if 205 <= my <= 239:
@@ -1036,22 +1090,46 @@ def handle_workspace_click(pos):
             for i, root in enumerate(roots):
                 if 48 + i * 132 <= mx < 168 + i * 132:
                     explorer_folder, explorer_selected, explorer_scroll = root, None, 0
+                    explorer_selected_paths.clear()
                     root.mkdir(parents=True, exist_ok=True)
                     return
-            if 590 <= mx <= 700:
+            # UP
+            if 590 <= mx <= 680:
                 explorer_folder, explorer_selected, explorer_scroll = explorer_folder.parent, None, 0
+                explorer_selected_paths.clear()
                 return
-            if 710 <= mx <= 820:
+            # REFRESH
+            if 690 <= mx <= 795:
                 explorer_selected, explorer_scroll = None, 0
+                explorer_selected_paths.clear()
+                message = "Refreshed."
                 return
-            if 980 <= mx <= 1208 and explorer_selected:
-                if explorer_selected.is_file() and local_tools.is_archive(explorer_selected):
+            # SELECT ALL
+            if 805 <= mx <= 945:
+                try:
+                    listing = local_tools.entries(explorer_folder)
+                    archives = [p for p in listing if local_tools.is_archive(p)]
+                    if explorer_selected_paths.issuperset(archives) and archives:
+                        explorer_selected_paths.clear()
+                        message = "Archive selection cleared."
+                    else:
+                        explorer_selected_paths.update(archives)
+                        message = f"Selected {len(explorer_selected_paths)} archives."
+                except OSError as exc:
+                    message = str(exc)[:90]
+                return
+            # Action button (Extract Archives / Run EXE)
+            if 955 <= mx <= 1208:
+                sel_archives = [p for p in explorer_selected_paths if local_tools.is_archive(p)]
+                if not sel_archives and explorer_selected and local_tools.is_archive(explorer_selected):
+                    sel_archives = [explorer_selected]
+                if sel_archives:
                     try:
-                        extraction_manager.extract(explorer_selected)
-                        message = f"Extracting {explorer_selected.name}..."
+                        extraction_manager.extract(sel_archives)
+                        message = f"Extracting {len(sel_archives)} archive(s)..."
                     except (OSError, ValueError, RuntimeError) as exc:
                         message = str(exc)
-                elif explorer_selected.is_file() and explorer_selected.suffix.lower() == ".exe":
+                elif explorer_selected and explorer_selected.is_file() and explorer_selected.suffix.lower() == ".exe":
                     message = launch_game({"title": explorer_selected.stem, "action": "local-exe",
                                            "install_path": str(explorer_selected), "store": "Local Game"})
                 else:
@@ -1065,16 +1143,21 @@ def handle_workspace_click(pos):
                     path = listing[idx]
                     if path.is_dir():
                         explorer_folder, explorer_selected, explorer_scroll = path, None, 0
+                        explorer_selected_paths.clear()
                     else:
                         explorer_selected = path
+                        if local_tools.is_archive(path):
+                            if path in explorer_selected_paths:
+                                explorer_selected_paths.remove(path)
+                            else:
+                                explorer_selected_paths.add(path)
             except OSError as exc:
                 message = str(exc)[:90]
 
     elif tab_index == TAB_BROWSER:
         if 48 <= mx <= 288 and 270 <= my <= 318:
             try:
-                if browser_proc is None or browser_proc.poll() is not None:
-                    browser_proc = local_tools.launch_browser(game_env())
+                browser_proc = local_tools.launch_browser(game_env())
                 message = "Chromium browser opened on cloud desktop."
             except (OSError, RuntimeError) as exc:
                 message = str(exc)
@@ -1094,19 +1177,36 @@ def handle_workspace_click(pos):
         elif 1040 <= mx <= 1208 and 244 <= my <= 274:
             message = "Stopping transfer." if download_manager.cancel() else "No active transfer."
         # Refresh Downloads
-        elif 720 <= mx <= 810 and 289 <= my <= 320:
+        elif 570 <= mx <= 660 and 289 <= my <= 320:
             downloads_selected = None
+            downloads_selected_paths.clear()
             downloads_scroll = 0
             message = "Downloads refreshed."
-        # Action button (Extract Archive / Run EXE / Start Torrent)
-        elif 825 <= mx <= 1090 and 289 <= my <= 320 and downloads_selected:
-            if local_tools.is_archive(downloads_selected):
+        # Select All / Clear Archives
+        elif 670 <= mx <= 800 and 289 <= my <= 320:
+            try:
+                dl_items = local_tools.entries(local_tools.DOWNLOADS)
+                archives = [p for p in dl_items if local_tools.is_archive(p)]
+                if downloads_selected_paths.issuperset(archives) and archives:
+                    downloads_selected_paths.clear()
+                    message = "Selection cleared."
+                else:
+                    downloads_selected_paths.update(archives)
+                    message = f"Selected {len(downloads_selected_paths)} archives."
+            except OSError as exc:
+                message = str(exc)[:90]
+        # Action button (Extract Archive / Run EXE)
+        elif 810 <= mx <= 1095 and 289 <= my <= 320:
+            sel_archives = [p for p in downloads_selected_paths if local_tools.is_archive(p)]
+            if not sel_archives and downloads_selected and local_tools.is_archive(downloads_selected):
+                sel_archives = [downloads_selected]
+            if sel_archives:
                 try:
-                    extraction_manager.extract(downloads_selected)
-                    message = f"Extracting {downloads_selected.name}..."
+                    extraction_manager.extract(sel_archives)
+                    message = f"Extracting {len(sel_archives)} archive(s)..."
                 except (OSError, ValueError, RuntimeError) as exc:
                     message = str(exc)
-            elif downloads_selected.suffix.lower() == ".exe":
+            elif downloads_selected and downloads_selected.suffix.lower() == ".exe":
                 message = launch_game({"title": downloads_selected.stem, "action": "local-exe",
                                        "install_path": str(downloads_selected), "store": "Local Game"})
         # Cancel Extraction
@@ -1118,7 +1218,13 @@ def handle_workspace_click(pos):
                 dl_items = local_tools.entries(local_tools.DOWNLOADS)
                 idx = downloads_scroll + (my - 328) // 33
                 if 0 <= idx < len(dl_items):
-                    downloads_selected = dl_items[idx]
+                    item = dl_items[idx]
+                    downloads_selected = item
+                    if local_tools.is_archive(item):
+                        if item in downloads_selected_paths:
+                            downloads_selected_paths.remove(item)
+                        else:
+                            downloads_selected_paths.add(item)
             except OSError as exc:
                 message = str(exc)[:90]
 
@@ -1330,10 +1436,12 @@ def main():
                             if explorer_selected.is_dir():
                                 explorer_folder = explorer_selected
                                 explorer_selected, explorer_scroll = None, 0
+                                explorer_selected_paths.clear()
                             elif local_tools.is_archive(explorer_selected):
+                                targets = list(explorer_selected_paths) if explorer_selected_paths else [explorer_selected]
                                 try:
-                                    extraction_manager.extract(explorer_selected)
-                                    message = f"Extracting {explorer_selected.name}..."
+                                    extraction_manager.extract(targets)
+                                    message = f"Extracting {len(targets)} archive(s)..."
                                 except (OSError, ValueError, RuntimeError) as exc:
                                     message = str(exc)[:100]
                             elif explorer_selected.suffix.lower() == ".exe":
@@ -1341,9 +1449,6 @@ def main():
                                                        "action": "local-exe",
                                                        "install_path": str(explorer_selected),
                                                        "store": "Local Game"})
-                            elif explorer_selected.suffix.lower() == ".torrent":
-                                download_manager.start(str(explorer_selected))
-                                tab_index = TAB_DOWNLOADS
                     except (OSError, ValueError, RuntimeError) as exc:
                         message = str(exc)[:100]
                     continue
