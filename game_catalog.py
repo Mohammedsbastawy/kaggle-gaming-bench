@@ -127,6 +127,8 @@ def legendary_installed_games() -> List[Dict[str, Any]]:
     candidates = (
         HOME / ".config" / "heroic" / "legendaryConfig" / "legendary" / "installed.json",
         HOME / ".config" / "legendary" / "installed.json",
+        Path("/root/.config/heroic/legendaryConfig/legendary/installed.json"),
+        Path("/root/.config/legendary/installed.json"),
     )
     installed_dict: Dict[str, Any] = {}
     for path in candidates:
@@ -218,7 +220,12 @@ def epic_library_games() -> List[Dict[str, Any]]:
         seen_apps.add(g["app_name"])
 
     # Scan metadata files for owned games
-    search_dirs = [meta_dir, heroic_meta_dir]
+    search_dirs = [
+        meta_dir,
+        heroic_meta_dir,
+        Path("/root/.config/legendary/metadata"),
+        Path("/root/.config/heroic/legendaryConfig/legendary/metadata"),
+    ]
     for mdir in search_dirs:
         if not mdir.is_dir():
             continue

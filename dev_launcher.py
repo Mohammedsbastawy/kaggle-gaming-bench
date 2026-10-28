@@ -84,7 +84,12 @@ def init_graphics():
             pygame.init()
             pygame.font.init()
             pygame.display.set_caption("7BZ Cloud Gaming")
-            display = pygame.display.set_mode((WIDTH, HEIGHT), pygame.NOFRAME)
+
+            # Detect actual display resolution so launcher fills 100% of the screen seamlessly
+            info = pygame.display.Info()
+            disp_w = info.current_w if info.current_w > 640 else WIDTH
+            disp_h = info.current_h if info.current_h > 360 else HEIGHT
+            display = pygame.display.set_mode((disp_w, disp_h), pygame.NOFRAME | pygame.RESIZABLE)
             screen = pygame.Surface((WIDTH, HEIGHT)).convert()
             clock = pygame.time.Clock()
 
@@ -1254,6 +1259,14 @@ def main():
     running = True
     while running:
         update_telemetry()
+        try:
+            curr_info = pygame.display.Info()
+            if curr_info.current_w > 640 and curr_info.current_h > 360:
+                if (curr_info.current_w, curr_info.current_h) != display.get_size():
+                    display = pygame.display.set_mode((curr_info.current_w, curr_info.current_h), pygame.NOFRAME | pygame.RESIZABLE)
+        except Exception:
+            pass
+
         screen.fill(BG_COLOR)
 
         draw_corner_brackets()

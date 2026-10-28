@@ -89,11 +89,13 @@ rule = '''<applications>
   <application class="*dev_launcher*">
     <decor>no</decor>
     <position force="yes"><x>0</x><y>0</y></position>
+    <maximized>yes</maximized>
     <focus>yes</focus>
   </application>
   <application title="*7BZ Cloud Gaming*">
     <decor>no</decor>
     <position force="yes"><x>0</x><y>0</y></position>
+    <maximized>yes</maximized>
     <focus>yes</focus>
   </application>
   <application class="*Chromium*" title="*">
