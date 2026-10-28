@@ -1307,8 +1307,13 @@ def handle_click(pos: Tuple[int, int]):
             local_tools.set_clipboard_text(EPIC_AUTH_URL)
             epic_auth_status = f"URL copied to clipboard: {EPIC_AUTH_URL}"
             return
-        # Input box (265 to 1015, y: 344 to 386)
-        if 265 <= mx <= 1015 and 344 <= my <= 386:
+        # Clear input box (970 to 1012, y: 348 to 382)
+        if 970 <= mx <= 1012 and 348 <= my <= 382 and epic_auth_code_input:
+            epic_auth_code_input = ""
+            epic_auth_status = "Cleared input."
+            return
+        # Input box (265 to 970, y: 344 to 386)
+        if 265 <= mx <= 970 and 344 <= my <= 386:
             epic_auth_editing = True
             return
         # Submit login button (265 to 475, y: 404 to 446)
@@ -1499,8 +1504,14 @@ def draw_epic_login_modal():
     pygame.draw.rect(screen, CYAN_NEON if epic_auth_editing else PANEL_BORDER, input_box, width=1, border_radius=8)
 
     prompt = epic_auth_code_input or "Click here to paste or type code (Ctrl+V)..."
-    screen.blit(font_body.render(clipped(prompt, font_body, 720), True,
+    screen.blit(font_body.render(clipped(prompt, font_body, 680), True,
                                  TEXT_WHITE if epic_auth_code_input else TEXT_MUTED), (278, 356))
+
+    if epic_auth_code_input:
+        btn_clr = pygame.Rect(input_box.right - 35, input_box.y + 6, 28, 30)
+        pygame.draw.rect(screen, (30, 40, 58), btn_clr, border_radius=6)
+        lbl_clr = font_btn.render("X", True, (240, 100, 100))
+        screen.blit(lbl_clr, (btn_clr.centerx - lbl_clr.get_width() // 2, btn_clr.centery - lbl_clr.get_height() // 2))
 
     # Action buttons
     btn_sub = pygame.Rect(265, 404, 210, 42)
@@ -1584,6 +1595,8 @@ def main():
                         submit_epic_login()
                     elif event.key == pygame.K_BACKSPACE:
                         epic_auth_code_input = epic_auth_code_input[:-1]
+                    elif event.key in (pygame.K_DELETE,) or (event.key == pygame.K_a and event.mod & pygame.KMOD_CTRL):
+                        epic_auth_code_input = ""
                     elif event.key == pygame.K_v and event.mod & pygame.KMOD_CTRL:
                         clip_val = local_tools.get_clipboard_text()
                         if clip_val:
