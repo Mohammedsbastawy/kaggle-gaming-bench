@@ -69,13 +69,13 @@ apt_install "core desktop" \
 
 # Developer desktop: direct downloads/torrents and a native browser in the stream.
 apt_install "download manager" aria2
-if ! command -v chromium >/dev/null 2>&1 && ! command -v chromium-browser >/dev/null 2>&1 && ! command -v google-chrome-stable >/dev/null 2>&1; then
-    echo "▶ Installing desktop browser..."
-    apt-get install -y --no-install-recommends -o DPkg::Lock::Timeout=120 chromium || true
-fi
-if ! command -v chromium >/dev/null 2>&1 && ! command -v chromium-browser >/dev/null 2>&1 && ! command -v google-chrome-stable >/dev/null 2>&1; then
+# Developer desktop browser: Google Chrome Stable (native deb, no snap)
+if ! command -v google-chrome-stable >/dev/null 2>&1 && ! command -v google-chrome >/dev/null 2>&1; then
+    echo "▶ Installing native desktop browser (Google Chrome Stable)..."
     CHROME_DEB=/tmp/google-chrome-stable_current_amd64.deb
-    wget -q https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb -O "$CHROME_DEB" || true
+    if [ ! -f "$CHROME_DEB" ] || [ "$(stat -c%s "$CHROME_DEB" 2>/dev/null || echo 0)" -lt 50000000 ]; then
+        wget -q https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb -O "$CHROME_DEB" || true
+    fi
     if [ -f "$CHROME_DEB" ] && [ "$(stat -c%s "$CHROME_DEB" 2>/dev/null || echo 0)" -gt 50000000 ]; then
         apt-get install -y --no-install-recommends -o DPkg::Lock::Timeout=120 "$CHROME_DEB" || true
     fi

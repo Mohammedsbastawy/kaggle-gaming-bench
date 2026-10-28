@@ -57,20 +57,32 @@ if not shutil.which("7z") and not shutil.which("unrar"):
     subprocess.run(["apt-get", "install", "-y", "--no-install-recommends", "-o", "DPkg::Lock::Timeout=60",
                     "p7zip-full", "unrar-free", "zip", "unzip"], check=False)
 
-# Ensure desktop browser is installed
-if not any(shutil.which(b) for b in ("chromium", "chromium-browser", "google-chrome-stable", "google-chrome", "firefox")):
-    print("▶ Ensuring desktop browser (chromium)...", flush=True)
-    subprocess.run(["apt-get", "install", "-y", "--no-install-recommends", "-o", "DPkg::Lock::Timeout=60",
-                    "chromium", "chromium-browser"], check=False)
-    if not any(shutil.which(b) for b in ("chromium", "chromium-browser", "google-chrome-stable", "google-chrome", "firefox")):
-        chrome_deb = Path("/tmp/google-chrome-stable_current_amd64.deb")
-        try:
-            print("▶ Downloading Google Chrome stable deb package...", flush=True)
+# Ensure desktop browser (Google Chrome Stable native deb) is installed
+def has_working_browser():
+    for name in ("google-chrome-stable", "google-chrome", "google-chrome-beta", "firefox", "chromium", "chromium-browser"):
+        b = shutil.which(name)
+        if b:
+            try:
+                txt = Path(b).read_text(encoding="utf-8", errors="ignore")
+                if "requires the chromium snap" in txt or "snap install" in txt:
+                    continue
+                return True
+            except Exception:
+                return True
+    return False
+
+if not has_working_browser():
+    print("▶ Installing native Google Chrome Stable (.deb)...", flush=True)
+    chrome_deb = Path("/tmp/google-chrome-stable_current_amd64.deb")
+    try:
+        if not chrome_deb.is_file() or chrome_deb.stat().st_size < 50000000:
+            print("  Downloading Google Chrome package...", flush=True)
             urllib.request.urlretrieve("https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb", str(chrome_deb))
-            if chrome_deb.stat().st_size > 50000000:
-                subprocess.run(["apt-get", "install", "-y", "--no-install-recommends", "-o", "DPkg::Lock::Timeout=60", str(chrome_deb)], check=False)
-        except Exception as e:
-            print(f"Notice: Chrome fallback: {e}", flush=True)
+        if chrome_deb.is_file() and chrome_deb.stat().st_size > 50000000:
+            subprocess.run(["apt-get", "install", "-y", "--no-install-recommends", "-o", "DPkg::Lock::Timeout=60", str(chrome_deb)], check=False)
+            print("  Google Chrome installed successfully.", flush=True)
+    except Exception as e:
+        print(f"Notice: Google Chrome install: {e}", flush=True)
 
 # Start live command bridge on port 9000
 bridge_script = BENCH / "remote_bridge.py"

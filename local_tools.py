@@ -135,11 +135,39 @@ def entries(folder):
     return sorted(result, key=lambda p: (not p.is_dir(), p.name.lower()))
 
 
+def is_snap_stub(path: Union[str, Path, None]) -> bool:
+    if not path:
+        return False
+    try:
+        p = Path(path)
+        if not p.is_file():
+            return False
+        content = p.read_text(encoding="utf-8", errors="ignore")
+        return "snap" in content and ("requires the chromium snap" in content or "snap install" in content)
+    except Exception:
+        return False
+
+
+def find_working_browser() -> Optional[str]:
+    candidates = (
+        "google-chrome-stable",
+        "google-chrome",
+        "google-chrome-beta",
+        "firefox",
+        "chromium",
+        "chromium-browser",
+    )
+    for name in candidates:
+        path = shutil.which(name)
+        if path and not is_snap_stub(path):
+            return path
+    return None
+
+
 def launch_browser(env):
-    binary = next((shutil.which(name) for name in ("chromium", "chromium-browser", "google-chrome-stable", "google-chrome", "firefox")
-                   if shutil.which(name)), None)
+    binary = find_working_browser()
     if not binary:
-        raise RuntimeError("Browser is not installed. Run setup.sh again.")
+        raise RuntimeError("Google Chrome is not installed. Run 'apt-get install -y /tmp/google-chrome-stable_current_amd64.deb'")
     DOWNLOADS.mkdir(parents=True, exist_ok=True)
     env = env.copy()
     env.pop("LD_PRELOAD", None)

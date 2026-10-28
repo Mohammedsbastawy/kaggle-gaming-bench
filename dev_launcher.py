@@ -969,8 +969,8 @@ def draw_workspace():
         except OSError as exc:
             screen.blit(font_body.render(str(exc)[:100], True, DANGER_RED), (48, 288))
     elif tab_index == TAB_BROWSER:
-        screen.blit(font_hero_title.render("Built-in Web Browser (Chromium)", True, TEXT_WHITE), (48, 142))
-        screen.blit(font_body.render("Open Chromium inside the cloud desktop to download game builds, mods, and assets directly.", True, TEXT_MUTED), (48, 182))
+        screen.blit(font_hero_title.render("Built-in Web Browser (Google Chrome)", True, TEXT_WHITE), (48, 142))
+        screen.blit(font_body.render("Open Google Chrome inside the cloud desktop to download game builds, mods, and assets directly.", True, TEXT_MUTED), (48, 182))
         screen.blit(font_body.render("Downloads from the browser are saved directly into /home/gamer/Downloads.", True, CYAN_NEON), (48, 212))
         workspace_button(pygame.Rect(48, 270, 240, 48), "OPEN WEB BROWSER", True)
         workspace_button(pygame.Rect(310, 270, 240, 48), "VIEW DOWNLOADS TAB")
