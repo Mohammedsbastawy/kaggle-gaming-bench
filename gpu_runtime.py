@@ -363,10 +363,10 @@ def get_input_mode() -> str:
     try:
         if mode_file.is_file():
             data = json.loads(mode_file.read_text(encoding="utf-8"))
-            return data.get("mode", "mouse_keyboard")
+            return data.get("mode", "gamepad")
     except Exception:
         pass
-    return os.environ.get("SEVEN_BZ_INPUT_MODE", "mouse_keyboard")
+    return os.environ.get("SEVEN_BZ_INPUT_MODE", "gamepad")
 
 
 def configure_mouse(wine_bin, env):

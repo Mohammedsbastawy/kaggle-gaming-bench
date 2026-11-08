@@ -245,10 +245,10 @@ def _get_input_mode() -> str:
     try:
         if INPUT_MODE_FILE.is_file():
             data = json.loads(INPUT_MODE_FILE.read_text(encoding="utf-8"))
-            return data.get("mode", "mouse_keyboard")
+            return data.get("mode", "gamepad")
     except Exception:
         pass
-    return "mouse_keyboard"
+    return "gamepad"
 
 
 def _set_input_mode(mode: str) -> str:

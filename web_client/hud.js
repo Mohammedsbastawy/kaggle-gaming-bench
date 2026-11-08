@@ -10,7 +10,7 @@
   const state = {
     expanded: false, qualityInitialized: false,
     rtts: [], audio: true, pointer: false, esc: false, toastTimer: 0,
-    hasGamepad: false, inputMode: "mouse_keyboard", gameRunning: null,
+    hasGamepad: false, inputMode: "gamepad", gameRunning: null,
     gameKey: null, inputRestartRequired: false,
     hidden: false, controllerMode: "desktop", keyboardOpen: false,
     padButtons: [], cursorX: .5, cursorY: .5, lastMove: 0, lastScroll: 0,
@@ -414,7 +414,7 @@
       const response = await fetch(`${controlBase()}/input-mode`, { credentials: "same-origin" });
       if (response.ok) {
         const data = await response.json();
-        state.inputMode = data.mode || "mouse_keyboard";
+        state.inputMode = data.mode || "gamepad";
         updateInputModeUI();
         syncControllerMode();
       }
