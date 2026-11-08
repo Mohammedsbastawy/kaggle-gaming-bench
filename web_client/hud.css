@@ -42,11 +42,15 @@
 }
 
 .seven-topbar { display: flex; align-items: center; min-height: 48px; padding: 8px 12px 8px 16px; gap: 14px; }
+.seven-appbar { display: flex; align-items: center; gap: 6px; min-width: 0; max-width: 46%; }
+.seven-appbar [data-apps] { display: flex; gap: 6px; min-width: 0; overflow-x: auto; scrollbar-width: thin; }
+.seven-app-button { overflow: hidden; max-width: 175px; text-overflow: ellipsis; }
+.seven-appbar .seven-button { flex: none; padding: 7px 9px; }
 .seven-brand { display: flex; align-items: center; gap: 10px; min-width: 215px; font-weight: 760; letter-spacing: .02em; }
 .seven-mark { width: 24px; height: 24px; border-radius: 8px; background: linear-gradient(140deg, var(--seven-cyan), var(--seven-violet)); box-shadow: 0 0 22px rgba(72,215,255,.32); }
 .seven-live { display: inline-flex; align-items: center; gap: 6px; color: var(--seven-good); font-size: 11px; font-weight: 700; letter-spacing: .12em; }
 .seven-live::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: currentColor; box-shadow: 0 0 12px currentColor; }
-.seven-quick { display: flex; flex: 1; align-items: center; justify-content: center; gap: 7px; }
+.seven-quick { display: flex; flex: 1; min-width: 0; align-items: center; justify-content: center; gap: 7px; overflow: hidden; }
 .seven-chip { min-width: 86px; padding: 6px 9px; border-radius: 10px; background: rgba(255,255,255,.055); border: 1px solid rgba(255,255,255,.055); text-align: center; }
 .seven-chip b { display: block; font-size: 13px; line-height: 14px; font-weight: 720; }
 .seven-chip span { color: var(--seven-muted); font-size: 9px; text-transform: uppercase; letter-spacing: .1em; }
@@ -84,6 +88,8 @@
 @media (max-width: 850px) {
   .seven-brand { min-width: auto; }
   .seven-brand-name { display: none; }
+  .seven-appbar { flex: 1; max-width: none; }
+  .seven-quick { display: none; }
   .seven-quick .seven-chip:nth-child(n+4) { display: none; }
   .seven-details { grid-template-columns: 1fr; }
   .seven-notice { grid-column: 1; }
@@ -93,7 +99,9 @@
   #seven-bz-hud { top: 6px; width: calc(100vw - 12px); }
   .seven-topbar { gap: 6px; padding: 6px 8px; }
   .seven-live { display: none; }
-  .seven-quick { justify-content: flex-start; overflow: hidden; }
+  .seven-appbar { min-width: 0; }
+  .seven-appbar .seven-button { font-size: 11px; padding: 7px 6px; }
+  .seven-app-button { max-width: 100px; }
   .seven-chip { min-width: 67px; padding: 5px; }
   .seven-quick .seven-chip:nth-child(n+3) { display: none; }
   .seven-metrics { grid-template-columns: repeat(2, 1fr); }

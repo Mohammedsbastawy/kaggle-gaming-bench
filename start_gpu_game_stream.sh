@@ -19,9 +19,26 @@ if [ "$(id -u)" -ne 0 ]; then
     exit 1
 fi
 
-if curl -fsS "http://127.0.0.1:${PORT}/api/health" >/dev/null 2>&1; then
-    echo "Port $PORT is already serving a stream; cannot verify its game display." >&2
+ensure_control() {
+    if curl -fsS http://127.0.0.1:8766/health >/dev/null 2>&1; then return; fi
+    nohup runuser -u gamer -- env DISPLAY=:2 HOME=/home/gamer \
+        XDG_RUNTIME_DIR="$RUNTIME" PULSE_SERVER="$PULSE_SERVER" \
+        python3 "$BENCH/session_control.py" \
+        > "$LOGS/game-control.log" 2>&1 < /dev/null &
+    echo $! > "$BENCH/game-control.pid"
+    for attempt in $(seq 1 20); do
+        curl -fsS http://127.0.0.1:8766/health >/dev/null 2>&1 && return
+        sleep 0.25
+    done
+    echo '7BZ control service did not start.' >&2
+    tail -15 "$LOGS/game-control.log" >&2
     exit 1
+}
+
+if curl -fsS "http://127.0.0.1:${PORT}/api/health" >/dev/null 2>&1; then
+    ensure_control
+    echo "Stream and control ready on port $PORT"
+    exit 0
 fi
 
 # The Kaggle NVIDIA EGL library crashes Xvfb when Mesa GLX initializes.
@@ -112,6 +129,7 @@ for attempt in $(seq 1 30); do
     sleep 0.5
 done
 curl -fsS "http://127.0.0.1:${PORT}/api/health" >/dev/null
+ensure_control
 
 # A live session may already have its game desktop and dashboard on :2.
 if [ "${GAME_STREAM_ONLY:-0}" = 1 ]; then
@@ -132,6 +150,5 @@ start_gamer_program() {
     echo $! > "$pidfile"
 }
 start_gamer_program openbox openbox
-start_gamer_program control python3 "$BENCH/session_control.py"
 start_gamer_program dashboard python3 "$BENCH/dev_launcher.py"
 echo "NVIDIA VirtualGL game stream ready on port $PORT at ${WIDTH}x${HEIGHT}/30"

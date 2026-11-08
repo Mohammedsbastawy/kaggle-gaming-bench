@@ -25,6 +25,7 @@
     <div class="seven-shell">
       <div class="seven-topbar">
         <div class="seven-brand"><i class="seven-mark"></i><span class="seven-brand-name">7BZ Dev Cloud Game</span><span class="seven-live">LIVE</span></div>
+        <nav class="seven-appbar" aria-label="Running programs"><button class="seven-button" data-action="home">7BZ Home</button><span data-apps></span><button class="seven-button seven-danger" data-action="reset-quick" hidden>Kill Game</button></nav>
         <div class="seven-quick">
           <div class="seven-chip"><b data-stat="fps">--</b><span>Stream FPS</span></div>
           <div class="seven-chip"><b data-stat="rtt">--</b><span>Stream RTT</span></div>
@@ -58,7 +59,6 @@
             <button class="seven-button" data-action="mode" data-stat="modename">🖱️ Mode: M+K</button>
             <button class="seven-button" data-action="controller">🎮 Desktop Cursor</button>
             <button class="seven-button" data-action="keyboard">⌨ On-screen Keyboard</button>
-            <button class="seven-button" data-action="home">7BZ Home</button>
             <button class="seven-button" data-action="esc">Esc Lock</button>
             <button class="seven-button" data-action="audio">Audio Unmute</button>
             <button class="seven-button seven-danger" data-action="reset">Force Kill / Exit Frozen Game</button>
@@ -101,12 +101,47 @@
         body: JSON.stringify(payload),
       });
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      return true;
     } catch (error) {
       if (!quiet || Date.now() - state.controllerErrorAt > 10000) {
         toast(`Controller input unavailable: ${error.message}`);
         state.controllerErrorAt = Date.now();
       }
+      return false;
     }
+  }
+
+  async function goHome() {
+    if (await controllerSend({ action: "home" })) toast("7BZ dashboard is in front.");
+  }
+
+  async function activateWindow(id) {
+    try {
+      const response = await fetch(`${controlBase()}/activate`, {
+        method: "POST", credentials: "same-origin",
+        headers: { "X-7BZ-Action": "hud", "Content-Type": "application/json" },
+        body: JSON.stringify({ id }),
+      });
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      syncControllerMode();
+    } catch (error) { toast(`Could not switch program: ${error.message}`); }
+  }
+
+  function updateAppbar(windows) {
+    const holder = one("[data-apps]");
+    const apps = windows.filter((window) => !window.dashboard).slice(0, 5);
+    holder.replaceChildren();
+    for (const app of apps) {
+      const control = document.createElement("button");
+      control.className = `seven-button seven-app-button${app.active ? " is-active" : ""}`;
+      control.dataset.action = "activate";
+      control.dataset.windowId = app.id;
+      control.title = app.title;
+      control.textContent = app.title;
+      holder.appendChild(control);
+    }
+    button("home").classList.toggle("is-active", windows.some((window) => window.dashboard && window.active));
+    button("reset-quick").hidden = !apps.length && !state.gameRunning;
   }
 
   const letters = "abcdefghijklmnopqrstuvwxyz0123456789.,/-_@:'?!".split("");
@@ -390,6 +425,7 @@
       if (!response.ok) return;
       const data = await response.json();
       const running = Boolean(data.running);
+      updateAppbar(Array.isArray(data.windows) ? data.windows : []);
       if (state.gameRunning === running) return;
       state.gameRunning = running;
       setControllerMode(running && state.inputMode === "gamepad" ? "game" : "desktop");
@@ -417,6 +453,7 @@
       const result = await response.json();
       toast(result.message || "Dashboard restored.");
       if (document.pointerLockElement) document.exitPointerLock();
+      await syncControllerMode();
     } catch (error) { toast(`Reset failed: ${error.message}`); }
     finally { control.disabled = false; control.textContent = "Force Kill / Exit Frozen Game"; }
   }
@@ -432,7 +469,8 @@
     if (action === "mode") toggleInputMode();
     if (action === "controller") setControllerMode(state.controllerMode === "desktop" ? "game" : "desktop");
     if (action === "keyboard") showKeyboard(!state.keyboardOpen);
-    if (action === "home") controllerSend({ action: "home" });
+    if (action === "home") goHome();
+    if (action === "activate") activateWindow(event.target.dataset.windowId);
     if (action === "esc") toggleEsc();
     if (action === "audio") {
       state.audio = true;
@@ -442,7 +480,7 @@
       button("audio").classList.add("is-active");
       toast("Audio enabled at full volume.");
     }
-    if (action === "reset") resetGame();
+    if (action === "reset" || action === "reset-quick") resetGame();
   });
 
   document.addEventListener("pointerlockchange", () => {
