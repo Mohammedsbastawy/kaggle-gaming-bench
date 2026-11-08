@@ -370,11 +370,18 @@ def get_input_mode() -> str:
 
 
 def configure_mouse(wine_bin, env):
-    """Apply verified Wine DirectInput, X11 pointer capture, and raw sensitivity."""
+    """Use Wine's normal mouse warp policy and keep raw pointer sensitivity."""
     if not wine_bin:
         return
+    # Forced warping recenters the cursor even for non-exclusive DirectInput
+    # windows, which makes streamed game menus and camera motion erratic.
+    try:
+        subprocess.run([wine_bin, "reg", "delete", "HKEY_CURRENT_USER\\Software\\Wine\\DirectInput",
+                        "/v", "MouseWarpOverride", "/f"], env=env, check=False,
+                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=8)
+    except (OSError, subprocess.TimeoutExpired):
+        pass
     values = (
-        ("HKEY_CURRENT_USER\\Software\\Wine\\DirectInput", "MouseWarpOverride", "force"),
         ("HKEY_CURRENT_USER\\Software\\Wine\\X11 Driver", "GrabPointer", "Y"),
         ("HKEY_CURRENT_USER\\Software\\Wine\\X11 Driver", "UseTakeFocus", "N"),
         ("HKEY_CURRENT_USER\\Control Panel\\Mouse", "MouseSpeed", "0"),
