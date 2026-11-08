@@ -174,35 +174,34 @@ chmod 777 /dev/input 2>/dev/null || true
 chmod 666 /dev/input/event* /dev/input/js* 2>/dev/null || true
 mkdir -p "/direct-stream-sockets" && chmod 777 "/direct-stream-sockets" 2>/dev/null || true
 
-nohup env DISPLAY=:1 XAUTHORITY="/nvidia-Xauthority"     SELKIES_ENCODER_DEVICE="" SELKIES_ENCODER=h264enc     SELKIES_AUDIO_ENABLED=true SELKIES_AUDIO_ON_START=true     SELKIES_AUDIO_DEVICE_NAME=output.monitor     SELKIES_JS_SOCKET_PATH="/direct-stream-sockets"     PULSE_SERVER="unix:/pulse/native"     PULSE_COOKIE=""     python3 -m selkies --port="" --enable-basic-auth=false     --mode=webrtc --enable-dual-mode=true     --allowed-origins=""     --framerate=30-30 --video-bitrate=7500,4000-12000     --rate-control-mode=cbr --congestion-control=false     --backpressure-queue-size=16     --command-enabled=false --file-transfers=none --printing-enabled=false     --web-root="/web-root" --ui-title='7BZ Dev Cloud Game'     --ui-show-sidebar=true --ui-show-logo=false     --ui-sidebar-show-video-settings=false     --ui-sidebar-show-screen-settings=false     --manual-resolution=true --manual-width="" --manual-height=""     > "/logs/direct-stream.log" 2>&1 < /dev/null &
-echo  > "/direct-stream.pid"
-for attempt in 1
-2
-3
-4
-5
-6
-7
-8
-9
-10
-11
-12
-13
-14
-15
-16
-17
-18
-19
-20; do
-    if curl -fsS "http://127.0.0.1:/api/health" >/dev/null 2>&1; then
-        chmod 666 "/direct-stream-sockets"/*.sock 2>/dev/null || true
+nohup env DISPLAY=:1 XAUTHORITY="$BENCH/nvidia-Xauthority" \
+    PULSE_SERVER="$PULSE_SERVER" PULSE_COOKIE="$AUDIO_COOKIE" \
+    SELKIES_ENCODER_DEVICE="$ENCODER_DEVICE" SELKIES_ENCODER=h264enc \
+    SELKIES_AUDIO_ENABLED=true SELKIES_AUDIO_ON_START=true \
+    SELKIES_AUDIO_DEVICE_NAME=output.monitor \
+    SELKIES_JS_SOCKET_PATH="$SELKIES_JS_SOCKET_PATH" \
+    python3 -m selkies --port="$PORT" --enable-basic-auth=false \
+    --mode=websockets --allowed-origins="$ORIGIN" \
+    --framerate=30-30 --video-bitrate=7000,800-10000 \
+    --rate-control-mode=cbr --congestion-control=true \
+    --backpressure-queue-size=4 \
+    --command-enabled=false --file-transfers=none --printing-enabled=false \
+    --web-root="$BENCH/web-root" --ui-title='7BZ Dev Cloud Game' \
+    --ui-show-sidebar=true --ui-show-logo=false \
+    --ui-sidebar-show-video-settings=false --ui-sidebar-show-screen-settings=false \
+    --manual-resolution=true --manual-width="$WIDTH" --manual-height="$HEIGHT" \
+    > "$BENCH/logs/direct-stream.log" 2>&1 < /dev/null &
+stream_pid=$!
+echo "$stream_pid" > "$BENCH/direct-stream.pid"
+for attempt in $(seq 1 20); do
+    if curl -fsS "http://127.0.0.1:${PORT}/api/health" >/dev/null 2>&1; then
+        chmod 666 "$SELKIES_JS_SOCKET_PATH"/*.sock 2>/dev/null || true
         start_desktop
-        echo "Direct NVIDIA stream ready on port "
+        echo "Direct NVIDIA stream ready on port $PORT"
         exit 0
     fi
+    if ! kill -0 "$stream_pid" 2>/dev/null; then break; fi
     sleep 0.5
 done
-echo "Direct stream did not start; see /logs/direct-stream.log" >&2
+echo "Direct stream did not start; see $BENCH/logs/direct-stream.log" >&2
 exit 1

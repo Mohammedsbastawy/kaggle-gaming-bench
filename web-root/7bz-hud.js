@@ -52,7 +52,7 @@
         </div>
         <div class="seven-card">
           <div class="seven-optimize">
-            <div class="seven-optimize-copy"><b>Automatic stream quality</b><span data-stat="profile">720p · 60 FPS · adaptive bitrate</span></div>
+            <div class="seven-optimize-copy"><b>Automatic stream quality</b><span data-stat="profile">1080p · 30 FPS · adaptive bitrate</span></div>
             <span class="seven-live">AUTO</span>
           </div>
           <div class="seven-actions">

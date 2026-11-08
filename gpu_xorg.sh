@@ -86,7 +86,7 @@ Section "Screen"
     DefaultDepth 24
     SubSection "Display"
         Depth 24
-        Modes "1280x720"
+        Modes "1920x1080" "1280x720"
     EndSubSection
 EndSection
 EOF
