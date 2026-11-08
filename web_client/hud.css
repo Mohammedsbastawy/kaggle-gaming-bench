@@ -98,5 +98,5 @@
   .seven-quick .seven-chip:nth-child(n+3) { display: none; }
   .seven-metrics { grid-template-columns: repeat(2, 1fr); }
 }
-/* Embedded browsers without fullscreen or Pointer Lock cannot enter Gaming Mode. */
-.seven-no-pointer-lock .gaming-mode-button { display: none !important; }
+/* Use the HUD's pointer lock without the fullscreen transition. */
+.gaming-mode-button { display: none !important; }

@@ -54,7 +54,7 @@
           </div>
           <div class="seven-actions">
             <button class="seven-button" data-action="fullscreen">Fullscreen</button>
-            <button class="seven-button" data-action="pointer">Gaming Mode (Lock Mouse)</button>
+            <button class="seven-button" data-action="pointer">Lock Mouse</button>
             <button class="seven-button" data-action="mode" data-stat="modename">🖱️ Mode: M+K</button>
             <button class="seven-button" data-action="controller">🎮 Desktop Cursor</button>
             <button class="seven-button" data-action="keyboard">⌨ On-screen Keyboard</button>
@@ -80,12 +80,6 @@
   const one = (selector) => hud.querySelector(selector);
   const stat = (name, text) => { const target = one(`[data-stat="${name}"]`); if (target) target.textContent = text; };
   const button = (name) => one(`[data-action="${name}"]`);
-  const canLockMouse = typeof document.documentElement.requestFullscreen === "function" &&
-    typeof document.body.requestPointerLock === "function" && document.fullscreenEnabled !== false;
-  if (!canLockMouse) {
-    document.body.classList.add("seven-no-pointer-lock");
-    button("pointer").textContent = "Gaming Mode needs Edge or Chrome";
-  }
   const toast = (message) => {
     const target = one(".seven-toast");
     target.textContent = message;
@@ -316,15 +310,27 @@
     try { localStorage.setItem("sevenBzHudHidden", hidden ? "1" : "0"); } catch (_) {}
   }
 
-  function togglePointer() {
-    if (!canLockMouse) {
-      toast("Open this stream in a full Edge or Chrome tab to lock the mouse.");
+  async function togglePointer() {
+    if (document.pointerLockElement) {
+      document.exitPointerLock();
       return;
     }
-    // Selkies owns fullscreen, pointer lock, and the relative-motion handler.
-    // A second requestPointerLock from this HUD can steal its input target.
-    post({ type: "requestGamingMode" });
-    toast("Gaming Mode requested. Press Esc to exit.");
+    // Lock Selkies' own video target. Its input handler then sends relative
+    // motion without the fullscreen/keyboard-lock transition that can stall
+    // embedded browsers.
+    const target = ["videoStream", "videoCanvas", "videoWorkerCanvas", "stream"]
+      .map((id) => document.getElementById(id))
+      .find((element) => element?.getBoundingClientRect().width > 0);
+    if (!target || typeof target.requestPointerLock !== "function") {
+      toast("Mouse lock needs a full Edge or Chrome browser tab.");
+      return;
+    }
+    try {
+      await target.requestPointerLock({ unadjustedMovement: true });
+    } catch (_) {
+      try { await target.requestPointerLock(); }
+      catch (_) { toast("Mouse lock was blocked. Open this stream in Edge or Chrome."); }
+    }
   }
 
   async function toggleInputMode() {
@@ -439,7 +445,10 @@
   document.addEventListener("pointerlockchange", () => {
     state.pointer = Boolean(document.pointerLockElement);
     button("pointer").classList.toggle("is-active", state.pointer);
+    button("pointer").textContent = state.pointer ? "Unlock Mouse (Esc)" : "Lock Mouse";
+    if (state.pointer) toast("Mouse locked. Press Esc to release it.");
   });
+  document.addEventListener("pointerlockerror", () => toast("Mouse lock was blocked. Open this stream in Edge or Chrome."));
   window.addEventListener("message", (event) => {
     if (event.source !== window || event.origin !== window.location.origin) return;
     if (event.data?.type === "serverSettings" && !state.qualityInitialized) {
@@ -457,6 +466,13 @@
     if (state.pointer) toast("Gaming Mode active: relative mouse input enabled.");
   });
   document.addEventListener("fullscreenchange", () => button("fullscreen").classList.toggle("is-active", Boolean(document.fullscreenElement)));
+  window.addEventListener("keydown", (event) => {
+    if (event.ctrlKey && event.shiftKey && event.code === "KeyX") {
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      togglePointer();
+    }
+  }, true);
   window.addEventListener("keydown", (event) => {
     if (event.ctrlKey && event.shiftKey && event.code === "KeyM") {
       event.preventDefault();
