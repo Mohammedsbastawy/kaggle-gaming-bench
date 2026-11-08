@@ -6,7 +6,7 @@ from pathlib import Path
 ROOT = Path(__file__).parent
 
 bootstrap = '''from pathlib import Path
-import hashlib, importlib.util, os, shutil, subprocess, sys, time
+import importlib.util, os, shutil, subprocess, sys, time
 
 REPO = Path('/tmp/kaggle-game-dev-bench')
 URL = 'https://github.com/Mohammedsbastawy/kaggle-gaming-bench.git'
@@ -22,11 +22,9 @@ else:
 
 revision = subprocess.check_output(['git', '-C', str(REPO), 'rev-parse', 'HEAD'], text=True).strip()
 marker = REPO / '.setup-complete'
-setup_files = ('setup.sh', 'install_lichii.sh', 'probe_nvidia_userspace.sh', 'setup_gpu_cache.sh')
-setup_version = hashlib.sha256(b''.join((REPO / name).read_bytes() for name in setup_files)).hexdigest()[:16]
 lichii_build = Path('/opt/lichii/build')
 lichii_ready = lichii_build.is_file() and lichii_build.read_text().strip() == 'build-117'
-ready = bool(marker.is_file() and marker.read_text().strip() == f'{setup_version}:{PROFILE}:{PREREQS}' and shutil.which('wine') and shutil.which('aria2c') and importlib.util.find_spec('selkies') and importlib.util.find_spec('pygame') and lichii_ready)
+ready = bool(marker.is_file() and marker.read_text().strip() == f'{revision}:{PROFILE}:{PREREQS}' and shutil.which('wine') and shutil.which('aria2c') and importlib.util.find_spec('selkies') and importlib.util.find_spec('pygame') and lichii_ready)
 if ready:
     print('7BZ environment already prepared in this Kaggle session; skipping setup.', flush=True)
 else:
@@ -42,7 +40,7 @@ else:
             restored = result.returncode == 0
     if not restored:
         subprocess.run(['bash', str(REPO / 'setup.sh')], check=True, env=env)
-    marker.write_text(f'{setup_version}:{PROFILE}:{PREREQS}', encoding='utf-8')
+    marker.write_text(f'{revision}:{PROFILE}:{PREREQS}', encoding='utf-8')
     print(f'7BZ {"cache restore" if restored else "setup"} complete in {time.monotonic() - started:.1f}s.', flush=True)
 '''
 
