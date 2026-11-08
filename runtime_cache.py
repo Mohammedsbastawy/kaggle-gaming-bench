@@ -100,7 +100,7 @@ def restore(cache):
     if manifest.get('schema') != SCHEMA:
         print('Runtime cache schema mismatch; using normal setup.', flush=True)
         return False
-    if manifest.get('base_packages_sha256') != fingerprint(packages()) or (manifest.get('driver') and manifest.get('driver') != driver()):
+    if manifest.get('base_packages_sha256') != fingerprint(packages()) or manifest.get('driver') != driver():
         print('Kaggle base image or NVIDIA driver changed; using normal setup.', flush=True)
         return False
     archive = cache / 'runtime.tar'
@@ -119,8 +119,6 @@ def restore(cache):
     print('Restoring cached 7BZ gaming environment...', flush=True)
     subprocess.run(['tar', '--extract', '--file', str(archive), '--directory', '/'], check=True)
     subprocess.run(['ldconfig'], check=True)
-    if not manifest.get('driver'):
-        subprocess.run(['bash', str(ROOT / 'setup_gpu_cache.sh')], check=True)
     subprocess.run([sys.executable, '-m', 'pip', 'install', '--no-cache-dir',
                     'selkies[jupyter]==2.1.0', 'pygame==2.6.1', 'psutil'], check=True)
     from auto_optimize import inject_keyboard_lock
