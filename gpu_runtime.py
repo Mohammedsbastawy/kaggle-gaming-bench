@@ -444,8 +444,10 @@ def launch(app, wine, local_path=None):
     if not direct_xorg:
         env["VGL_DISPLAY"] = "egl0"
     env["DXVK_FILTER_DEVICE_NAME"] = "Tesla T4"
-    env["WINE_FULLSCREEN_FSR"] = "1"
-    env["WINE_FULLSCREEN_FSR_STRENGTH"] = "2"
+    # The stream and desktop already run at native 1080p. Wine's fullscreen
+    # upscaler can advertise a smaller virtual game surface and misalign input.
+    env.pop("WINE_FULLSCREEN_FSR", None)
+    env.pop("WINE_FULLSCREEN_FSR_STRENGTH", None)
     env["VKD3D_CONFIG"] = "dxr11,dxr"
     env["VKD3D_FEATURE_LEVEL"] = "12_1"
 
