@@ -11,7 +11,9 @@
     expanded: false, qualityInitialized: false,
     rtts: [], audio: true, pointer: false, esc: false, toastTimer: 0,
     hasGamepad: false, inputMode: "mouse_keyboard",
+    hidden: false,
   };
+  try { state.hidden = localStorage.getItem("sevenBzHudHidden") === "1"; } catch (_) {}
 
   const hud = document.createElement("section");
   hud.id = "seven-bz-hud";
@@ -28,6 +30,7 @@
           <div class="seven-chip"><b data-stat="gpu">--</b><span>GPU (G0|G1)</span></div>
           <div class="seven-chip"><b data-stat="cpu">--</b><span>CPU load</span></div>
         </div>
+        <button class="seven-button seven-icon-button" data-action="hide" aria-label="Hide top bar" title="Hide top bar">−</button>
         <button class="seven-button seven-icon-button" data-action="expand" aria-label="Open controls" title="Open controls">⌄</button>
       </div>
       <div class="seven-details is-collapsed">
@@ -55,11 +58,13 @@
             <button class="seven-button seven-danger" data-action="reset">Force Kill / Exit Frozen Game</button>
           </div>
         </div>
-        <div class="seven-notice"><span>Input tip: In FPS games (Blood West), use Gaming Mode for unconstrained 360° mouse view. If using Gamepad, press any button on the controller to connect.</span><span>Ctrl+Shift+M: HUD</span></div>
+        <div class="seven-notice"><span>Input tip: In FPS games (Blood West), use Gaming Mode for unconstrained 360° mouse view. If using Gamepad, press any button on the controller to connect.</span><span>Ctrl+Shift+H: hide bar</span></div>
       </div>
     </div>
+    <button class="seven-reveal" data-action="show" aria-label="Show 7BZ top bar" title="Show 7BZ top bar">Show 7BZ ▾</button>
     <div class="seven-toast" role="status"></div>`;
   document.body.appendChild(hud);
+  hud.classList.toggle("is-hidden", state.hidden);
 
   const one = (selector) => hud.querySelector(selector);
   const stat = (name, text) => { const target = one(`[data-stat="${name}"]`); if (target) target.textContent = text; };
@@ -172,6 +177,12 @@
     post({ type: "statsOpen", open: true });
   }
 
+  function setHidden(hidden) {
+    state.hidden = hidden;
+    hud.classList.toggle("is-hidden", hidden);
+    try { localStorage.setItem("sevenBzHudHidden", hidden ? "1" : "0"); } catch (_) {}
+  }
+
   function togglePointer() {
     // Selkies owns fullscreen, pointer lock, and the relative-motion handler.
     // A second requestPointerLock from this HUD can steal its input target.
@@ -254,6 +265,8 @@
   hud.addEventListener("click", (event) => {
     const action = event.target.closest("[data-action]")?.dataset.action;
     if (!action) return;
+    if (action === "hide") setHidden(true);
+    if (action === "show") setHidden(false);
     if (action === "expand") toggleExpanded();
     if (action === "fullscreen") post({ type: "requestFullscreen" });
     if (action === "pointer") togglePointer();
@@ -295,6 +308,10 @@
     if (event.ctrlKey && event.shiftKey && event.code === "KeyM") {
       event.preventDefault();
       toggleExpanded();
+    }
+    if (event.ctrlKey && event.shiftKey && event.code === "KeyH") {
+      event.preventDefault();
+      setHidden(!state.hidden);
     }
   }, true);
 
