@@ -110,7 +110,7 @@ nohup env CUDA_VISIBLE_DEVICES="$ENCODER_DEVICE" \
     SELKIES_JS_SOCKET_PATH=/tmp \
     python3 -m selkies --port="$PORT" --enable-basic-auth=false \
     --mode=websockets --allowed-origins="$ORIGIN" \
-    --encoder=h264enc --framerate=30-30 --video-bitrate=7000,800-10000 \
+    --encoder=h264enc --framerate=30-30 --video-bitrate=4500,800-6500 \
     --rate-control-mode=cbr --congestion-control=true \
     --backpressure-queue-size=4 \
     --command-enabled=false --file-transfers=none --printing-enabled=false \
@@ -150,5 +150,5 @@ start_gamer_program() {
     echo $! > "$pidfile"
 }
 start_gamer_program openbox openbox
-start_gamer_program dashboard python3 "$BENCH/dev_launcher.py"
+start_gamer_program dashboard nice -n 10 python3 "$BENCH/dev_launcher.py"
 echo "NVIDIA VirtualGL game stream ready on port $PORT at ${WIDTH}x${HEIGHT}/30"

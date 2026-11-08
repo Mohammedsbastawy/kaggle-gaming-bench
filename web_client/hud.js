@@ -50,7 +50,7 @@
         </div>
         <div class="seven-card">
           <div class="seven-optimize">
-            <div class="seven-optimize-copy"><b>Automatic stream quality</b><span data-stat="profile">720p · 60 FPS · adaptive bitrate</span></div>
+            <div class="seven-optimize-copy"><b>Automatic stream quality</b><span data-stat="profile">1080p · 30 FPS · adaptive bitrate</span></div>
             <span class="seven-live">AUTO</span>
           </div>
           <div class="seven-actions">
@@ -494,7 +494,7 @@
       // Reset the chosen ceiling once, after the dashboard restores its settings.
       state.qualityInitialized = true;
       setTimeout(() => post({ type: "settings", settings: {
-        rate_control_mode: "cbr", video_bitrate: 7000, framerate: 30,
+        rate_control_mode: "cbr", video_bitrate: 4500, framerate: 30,
       } }), 1500);
       return;
     }

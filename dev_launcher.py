@@ -1716,6 +1716,14 @@ def main():
 
     running = True
     while running:
+        # Keep the dashboard responsive for Home, but do not spend a CPU core
+        # drawing an obscured window while a game needs that core.
+        pygame.event.pump()
+        if active_proc is not None and active_proc.poll() is None and not pygame.key.get_focused():
+            if any(event.type == pygame.QUIT for event in pygame.event.get()):
+                break
+            clock.tick(6)
+            continue
         update_telemetry()
         screen.fill(BG_COLOR)
 
