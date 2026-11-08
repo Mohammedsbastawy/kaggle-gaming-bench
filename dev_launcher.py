@@ -378,6 +378,9 @@ def submit_epic_login():
     if not clean:
         epic_auth_status = "Please paste your authorization code first."
         return
+    if clean.rstrip("/") == EPIC_AUTH_URL.rstrip("/") or clean.startswith("https://legendary.gl/epiclogin"):
+        epic_auth_status = "That is the login link! Sign in on the website, then copy the 32-char code."
+        return
 
     epic_auth_status = "Authenticating with Epic Games..."
 

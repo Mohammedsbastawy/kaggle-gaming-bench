@@ -16,7 +16,10 @@
     lastFocusNavigation: 0,
     keyIndex: 0, shifted: false, controllerBusy: false, controllerErrorAt: 0,
   };
-  try { state.hidden = localStorage.getItem("sevenBzHudHidden") === "1"; } catch (_) {}
+  try {
+    localStorage.removeItem("sevenBzHudHidden");
+    state.hidden = sessionStorage.getItem("sevenBzHudHidden") === "1";
+  } catch (_) {}
 
   const hud = document.createElement("section");
   hud.id = "seven-bz-hud";
@@ -307,7 +310,10 @@
   function setHidden(hidden) {
     state.hidden = hidden;
     hud.classList.toggle("is-hidden", hidden);
-    try { localStorage.setItem("sevenBzHudHidden", hidden ? "1" : "0"); } catch (_) {}
+    try {
+      sessionStorage.setItem("sevenBzHudHidden", hidden ? "1" : "0");
+      localStorage.removeItem("sevenBzHudHidden");
+    } catch (_) {}
   }
 
   function togglePointer() {

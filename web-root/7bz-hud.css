@@ -26,9 +26,9 @@
 
 #seven-bz-hud.is-hidden { top: 0; width: auto; }
 #seven-bz-hud.is-hidden .seven-shell { display: none; }
-.seven-reveal { display: none; pointer-events: auto; margin: 0 auto; padding: 4px 12px 6px; border: 1px solid var(--seven-line); border-top: 0; border-radius: 0 0 10px 10px; background: rgba(12, 20, 40, .9); color: var(--seven-text); font: 650 11px Inter, ui-sans-serif, system-ui, sans-serif; cursor: pointer; }
+.seven-reveal { display: none; pointer-events: auto; margin: 0 auto; padding: 6px 14px 7px; border: 1px solid var(--seven-cyan); border-top: 0; border-radius: 0 0 10px 10px; background: rgba(10, 18, 36, .96); color: var(--seven-cyan); font: 700 12px Inter, ui-sans-serif, system-ui, sans-serif; cursor: pointer; box-shadow: 0 4px 14px rgba(0, 0, 0, .6); }
 #seven-bz-hud.is-hidden .seven-reveal { display: block; }
-.seven-reveal:hover, .seven-reveal:focus-visible { background: rgba(34, 49, 78, .98); outline: 2px solid var(--seven-cyan); }
+.seven-reveal:hover, .seven-reveal:focus-visible { background: rgba(25, 40, 70, .98); outline: 2px solid var(--seven-cyan); }
 
 .seven-shell {
   pointer-events: auto;
