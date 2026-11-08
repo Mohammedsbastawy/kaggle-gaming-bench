@@ -16,6 +16,9 @@ SCHEMA = 1
 ROOT = Path('/tmp/kaggle-game-dev-bench')
 BASELINE = Path('/kaggle/working/7bz-base-packages.json')
 CACHE = Path('/kaggle/working/7bz-runtime-cache')
+# The first CPU-built archive predates the setup_version manifest field.
+INITIAL_CACHE_SETUP_VERSION = '3cb88ac853f462d7'
+SETUP_FILES = ('setup.sh', 'install_lichii.sh', 'probe_nvidia_userspace.sh', 'setup_gpu_cache.sh')
 
 
 def run(*args):
@@ -30,6 +33,10 @@ def packages():
 def fingerprint(mapping):
     data = json.dumps(mapping, sort_keys=True, separators=(',', ':')).encode()
     return hashlib.sha256(data).hexdigest()
+
+
+def setup_version():
+    return hashlib.sha256(b''.join((ROOT / name).read_bytes() for name in SETUP_FILES)).hexdigest()[:16]
 
 
 def driver():
@@ -89,7 +96,8 @@ def build():
                     '--files-from', str(files)], check=True)
     manifest = {'schema': SCHEMA, 'base_packages_sha256': fingerprint(base['packages']),
                 'driver': base['driver'], 'archive_sha256': digest(archive),
-                'package_count': len(changed), 'archive_bytes': archive.stat().st_size}
+                'package_count': len(changed), 'archive_bytes': archive.stat().st_size,
+                'setup_version': setup_version()}
     (CACHE / 'manifest.json').write_text(json.dumps(manifest, indent=2), encoding='utf-8')
     files.unlink()
     print(f"Built 7BZ runtime cache: {len(changed)} packages, {archive.stat().st_size / 1e9:.2f} GB.", flush=True)
@@ -99,6 +107,9 @@ def restore(cache):
     manifest = json.loads((cache / 'manifest.json').read_text(encoding='utf-8'))
     if manifest.get('schema') != SCHEMA:
         print('Runtime cache schema mismatch; using normal setup.', flush=True)
+        return False
+    if manifest.get('setup_version', INITIAL_CACHE_SETUP_VERSION) != setup_version():
+        print('7BZ setup dependencies changed; using normal setup.', flush=True)
         return False
     if manifest.get('base_packages_sha256') != fingerprint(packages()) or (manifest.get('driver') and manifest.get('driver') != driver()):
         print('Kaggle base image or NVIDIA driver changed; using normal setup.', flush=True)
