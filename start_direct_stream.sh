@@ -4,8 +4,8 @@
 set -euo pipefail
 BENCH=/tmp/kaggle-game-dev-bench
 PORT="${DIRECT_STREAM_PORT:-8080}"
-WIDTH="${DIRECT_STREAM_WIDTH:-1280}"
-HEIGHT="${DIRECT_STREAM_HEIGHT:-720}"
+WIDTH="${DIRECT_STREAM_WIDTH:-1920}"
+HEIGHT="${DIRECT_STREAM_HEIGHT:-1080}"
 ORIGIN="${SELKIES_ALLOWED_ORIGINS:-https://kkb-production.jupyter-proxy.kaggle.net}"
 if [ "$(id -u)" -ne 0 ]; then
     echo 'This Xorg installation requires root for Selkies MIT-SHM capture.' >&2
@@ -174,7 +174,7 @@ chmod 777 /dev/input 2>/dev/null || true
 chmod 666 /dev/input/event* /dev/input/js* 2>/dev/null || true
 mkdir -p "/direct-stream-sockets" && chmod 777 "/direct-stream-sockets" 2>/dev/null || true
 
-nohup env DISPLAY=:1 XAUTHORITY="/nvidia-Xauthority"     SELKIES_ENCODER_DEVICE="" SELKIES_ENCODER=h264enc     SELKIES_AUDIO_ENABLED=true SELKIES_AUDIO_ON_START=true     SELKIES_AUDIO_DEVICE_NAME=output.monitor     SELKIES_JS_SOCKET_PATH="/direct-stream-sockets"     PULSE_SERVER="unix:/pulse/native"     PULSE_COOKIE=""     python3 -m selkies --port="" --enable-basic-auth=false     --mode=websockets --enable-dual-mode=false     --allowed-origins=""     --framerate=30-30 --video-bitrate=5000,3500-8000     --rate-control-mode=cbr --congestion-control=false     --backpressure-queue-size=16     --command-enabled=false --file-transfers=none --printing-enabled=false     --web-root="/web-root" --ui-title='7BZ Dev Cloud Game'     --ui-show-sidebar=true --ui-show-logo=false     --ui-sidebar-show-video-settings=false     --ui-sidebar-show-screen-settings=false     --manual-resolution=true --manual-width="" --manual-height=""     > "/logs/direct-stream.log" 2>&1 < /dev/null &
+nohup env DISPLAY=:1 XAUTHORITY="/nvidia-Xauthority"     SELKIES_ENCODER_DEVICE="" SELKIES_ENCODER=h264enc     SELKIES_AUDIO_ENABLED=true SELKIES_AUDIO_ON_START=true     SELKIES_AUDIO_DEVICE_NAME=output.monitor     SELKIES_JS_SOCKET_PATH="/direct-stream-sockets"     PULSE_SERVER="unix:/pulse/native"     PULSE_COOKIE=""     python3 -m selkies --port="" --enable-basic-auth=false     --mode=webrtc --enable-dual-mode=true     --allowed-origins=""     --framerate=30-30 --video-bitrate=7500,4000-12000     --rate-control-mode=cbr --congestion-control=false     --backpressure-queue-size=16     --command-enabled=false --file-transfers=none --printing-enabled=false     --web-root="/web-root" --ui-title='7BZ Dev Cloud Game'     --ui-show-sidebar=true --ui-show-logo=false     --ui-sidebar-show-video-settings=false     --ui-sidebar-show-screen-settings=false     --manual-resolution=true --manual-width="" --manual-height=""     > "/logs/direct-stream.log" 2>&1 < /dev/null &
 echo  > "/direct-stream.pid"
 for attempt in 1
 2
