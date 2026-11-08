@@ -325,6 +325,9 @@
       toast("Mouse lock needs a full Edge or Chrome browser tab.");
       return;
     }
+    setTimeout(() => {
+      if (!document.pointerLockElement) toast("Mouse lock is unavailable here. Open the stream in Edge or Chrome.");
+    }, 1500);
     try {
       await target.requestPointerLock({ unadjustedMovement: true });
     } catch (_) {
