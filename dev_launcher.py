@@ -62,6 +62,14 @@ TAB_LICHII = 4
 TABS = ["Epic Games", "Local Games", "Downloads", "Browser", "Lichii EMU"]
 LICHII_APP = Path("/opt/lichii/squashfs-root/AppRun")
 
+
+def lichii_available() -> bool:
+    """Check launch access without raising inside the dashboard draw loop."""
+    try:
+        return os.access(LICHII_APP, os.X_OK) and LICHII_APP.is_file()
+    except OSError:
+        return False
+
 display = None
 screen = None
 clock = None
@@ -443,7 +451,7 @@ def launch_game(item: Dict[str, Any]) -> str:
             else:
                 command = [path]
         elif action == "lichii":
-            if not LICHII_APP.is_file():
+            if not lichii_available():
                 return "Lichii is unavailable. Re-run Kaggle setup to install build 117."
             command = [str(LICHII_APP)]
         else:
@@ -1039,10 +1047,11 @@ def draw_workspace():
     elif tab_index == TAB_LICHII:
         screen.blit(font_hero_title.render("Lichii Emulator", True, TEXT_WHITE), (48, 142))
         screen.blit(font_body.render("Nintendo Switch / Switch 2 emulator - build 117 (Linux PGO)", True, CYAN_NEON), (48, 184))
-        status = "INSTALLED" if LICHII_APP.is_file() else "NOT INSTALLED"
+        available = lichii_available()
+        status = "READY" if available else "UNAVAILABLE"
         screen.blit(font_body.render(f"STATUS: {status}", True,
-                                     LIME_GREEN if LICHII_APP.is_file() else DANGER_RED), (48, 225))
-        workspace_button(pygame.Rect(48, 270, 245, 48), "OPEN LICHII", LICHII_APP.is_file())
+                                     LIME_GREEN if available else DANGER_RED), (48, 225))
+        workspace_button(pygame.Rect(48, 270, 245, 48), "OPEN LICHII", available)
         screen.blit(font_body.render("Import your own legally obtained games and system files in Lichii.", True, TEXT_WHITE), (48, 353))
         screen.blit(font_body.render("Game files, keys, and firmware are not included. Your settings live in the gamer home folder.", True, TEXT_MUTED), (48, 386))
         screen.blit(font_small.render("Experimental software: graphics and compatibility depend on the Kaggle GPU session.", True, TEXT_MUTED), (48, 435))

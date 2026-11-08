@@ -5,6 +5,7 @@ set -euo pipefail
 url="https://github.com/zortos293/Lichii/releases/download/build-117/lichii-linux-x86_64-pgo.AppImage"
 target="/opt/lichii"
 if [ -x "$target/squashfs-root/AppRun" ] && [ "$(cat "$target/build" 2>/dev/null)" = "build-117" ]; then
+    chmod -R a+rX "$target/squashfs-root"
     echo "Lichii build 117 is already installed."
     exit 0
 fi
@@ -20,5 +21,6 @@ cd "$work"
 test -x "$work/squashfs-root/AppRun"
 mkdir -p "$target"
 cp -a "$work/squashfs-root" "$target/"
+chmod -R a+rX "$target/squashfs-root"
 echo "build-117" > "$target/build"
 echo "Lichii build 117 installed in $target."
