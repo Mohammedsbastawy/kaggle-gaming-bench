@@ -10,9 +10,10 @@
   const state = {
     expanded: false, qualityInitialized: false,
     rtts: [], audio: true, pointer: false, esc: false, toastTimer: 0,
-    hasGamepad: false, inputMode: "mouse_keyboard",
+    hasGamepad: false, inputMode: "mouse_keyboard", gameRunning: null,
     hidden: false, controllerMode: "desktop", keyboardOpen: false,
     padButtons: [], cursorX: .5, cursorY: .5, lastMove: 0, lastScroll: 0,
+    lastFocusNavigation: 0,
     keyIndex: 0, shifted: false, controllerBusy: false, controllerErrorAt: 0,
   };
   try { state.hidden = localStorage.getItem("sevenBzHudHidden") === "1"; } catch (_) {}
@@ -166,15 +167,28 @@
           if ([12, 13, 14, 15].some(edge)) drawKeyboard();
           if (edge(0)) typeSelected();
         } else {
-          if (edge(0)) controllerSend({ action: "click", button: 1 });
+          if (edge(0)) {
+            controllerSend(state.lastFocusNavigation > state.lastMove
+              ? { action: "key", key: "Return" }
+              : { action: "click", button: 1 });
+          }
           if (edge(1)) controllerSend({ action: "key", key: "Escape" });
           if (edge(2)) controllerSend({ action: "click", button: 3 });
           if (edge(9)) controllerSend({ action: "key", key: "Return" });
           for (const [index, key] of [[12, "Up"], [13, "Down"], [14, "Left"], [15, "Right"]]) {
-            if (edge(index)) controllerSend({ action: "key", key });
+            if (edge(index)) {
+              state.lastFocusNavigation = now;
+              controllerSend({ action: "key", key });
+            }
           }
-          if (edge(4)) controllerSend({ action: "key", key: "Page_Up" });
-          if (edge(5)) controllerSend({ action: "key", key: "Page_Down" });
+          if (edge(4)) {
+            state.lastFocusNavigation = now;
+            controllerSend({ action: "key", key: "Page_Up" });
+          }
+          if (edge(5)) {
+            state.lastFocusNavigation = now;
+            controllerSend({ action: "key", key: "Page_Down" });
+          }
           const dx = padAxis(pad.axes[0]), dy = padAxis(pad.axes[1]);
           if ((dx || dy) && now - state.lastMove > 50 && !state.controllerBusy) {
             state.lastMove = now;
@@ -206,7 +220,6 @@
         if (!state.hasGamepad) {
           state.hasGamepad = true;
           toast(`🎮 Controller Connected: ${name.slice(0, 25)}`);
-          setControllerMode("desktop");
         }
       } else {
         stat("pad", "None");
@@ -347,7 +360,20 @@
         const data = await response.json();
         state.inputMode = data.mode || "mouse_keyboard";
         updateInputModeUI();
+        syncControllerMode();
       }
+    } catch (_) {}
+  }
+
+  async function syncControllerMode() {
+    try {
+      const response = await fetch(`${controlBase()}/status`, { credentials: "same-origin" });
+      if (!response.ok) return;
+      const data = await response.json();
+      const running = Boolean(data.running);
+      if (state.gameRunning === running) return;
+      state.gameRunning = running;
+      setControllerMode(running && state.inputMode === "gamepad" ? "game" : "desktop");
     } catch (_) {}
   }
 
@@ -435,7 +461,6 @@
   window.addEventListener("gamepadconnected", (event) => {
     state.hasGamepad = true;
     toast(`🎮 Gamepad Connected: ${event.gamepad.id.slice(0, 30)}`);
-    setControllerMode("desktop");
     checkGamepads();
   });
   window.addEventListener("gamepaddisconnected", () => {
@@ -446,6 +471,7 @@
 
   post({ type: "statsOpen", open: true });
   syncInputMode();
+  setInterval(syncControllerMode, 3000);
   setInterval(render, 1000);
   setTimeout(render, 700);
   requestAnimationFrame(controllerFrame);

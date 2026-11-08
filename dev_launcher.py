@@ -144,7 +144,10 @@ def game_env() -> Dict[str, str]:
                                      if env.get("GAMELAB_DIRECT_XORG") == "1" else "/tmp")
     env["SDL_JOYSTICK_DISABLE_UDEV"] = "1"
     env["SDL_JOYSTICK_DEVICE"] = "/dev/input/event1000:/dev/input/event1001:/dev/input/event1002:/dev/input/event1003"
-    interposer = "/usr/$LIB/selkies_input_interposer.so:/usr/$LIB/selkies_fake_udev.so"
+    import subprocess as _sp
+    _sp.run(["chmod","777","/dev/input"], check=False)
+    _sp.run(["chmod","666","/dev/input/event1000","/dev/input/event1001","/dev/input/event1002","/dev/input/event1003","/dev/input/js0","/dev/input/js1","/dev/input/js2","/dev/input/js3"], check=False)
+    interposer = "/usr/lib/x86_64-linux-gnu/selkies_input_interposer.so:/usr/lib/x86_64-linux-gnu/selkies_fake_udev.so:/usr/lib/i386-linux-gnu/selkies_input_interposer.so:/usr/lib/i386-linux-gnu/selkies_fake_udev.so"
     env["LD_PRELOAD"] = (interposer + ":" + env.get("LD_PRELOAD", "")).rstrip(":")
     return env
 
@@ -382,11 +385,11 @@ def submit_epic_login():
         global epic_auth_status, epic_login_modal, message
         ok, res_msg = game_catalog.login_legendary(clean)
         if ok:
-            epic_auth_status = "Success! Loading your library..."
+            epic_auth_status = res_msg
             load_library()
             time.sleep(1)
             epic_login_modal = False
-            message = f"Connected to Epic Games as {epic_user['displayName']}! {len(epic_games)} games found."
+            message = f"{res_msg} Connected as {epic_user['displayName']}; {len(epic_games)} games found."
         else:
             epic_auth_status = f"Login failed: {res_msg}"
 

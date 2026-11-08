@@ -491,10 +491,23 @@ def launch(app, wine, local_path=None):
         env["SELKIES_JS_SOCKET_PATH"] = ("/tmp/kaggle-game-dev-bench/direct-stream-sockets"
                                          if direct_xorg else "/tmp")
         env["SDL_JOYSTICK_DEVICE"] = "/dev/input/event1000:/dev/input/event1001:/dev/input/event1002:/dev/input/event1003"
-        interposer = "/usr/$LIB/selkies_input_interposer.so:/usr/$LIB/selkies_fake_udev.so"
+        # Fix /dev/input permissions so gamer user can access virtual gamepad devices
+        import subprocess as _sp
+        _sp.run(["chmod","777","/dev/input"], check=False)
+        _sp.run(["chmod","666","/dev/input/event1000","/dev/input/event1001",
+                 "/dev/input/event1002","/dev/input/event1003",
+                 "/dev/input/js0","/dev/input/js1",
+                 "/dev/input/js2","/dev/input/js3"], check=False)
+        interposer = "/usr/lib/x86_64-linux-gnu/selkies_input_interposer.so:/usr/lib/x86_64-linux-gnu/selkies_fake_udev.so:/usr/lib/i386-linux-gnu/selkies_input_interposer.so:/usr/lib/i386-linux-gnu/selkies_fake_udev.so"
         env["LD_PRELOAD"] = (interposer + ":" + env.get("LD_PRELOAD", "")).rstrip(":")
 
-    target_bin = local_target if local_target else find_game_binary(app)
+    ghostwire_install = legendary_install_path(app) if app and not local_target else None
+    ghostwire_bin = None
+    if ghostwire_install and ghostwire_install.name.casefold() == "ghostwiretokyo":
+        candidate = ghostwire_install / "Snowfall/Binaries/Win64/GWT.exe"
+        if candidate.is_file():
+            ghostwire_bin = candidate
+    target_bin = local_target if local_target else ghostwire_bin or find_game_binary(app)
     is_64bit = True
     if target_bin:
         try:
@@ -540,7 +553,17 @@ def launch(app, wine, local_path=None):
         except ValueError:
             pass
 
-    if target_bin and wine_bin:
+    if ghostwire_bin and wine_bin:
+        # The root GWT.exe is a prerequisite launcher. Legendary supplies Epic
+        # exchange credentials to the actual game binary; DX11 avoids the
+        # unavailable Vulkan X11 presentation path in this Kaggle session.
+        env.pop("WINEDLLOVERRIDES", None)
+        env.pop("DXVK_FILTER_DEVICE_NAME", None)
+        command = ["legendary", "launch", app, "--wine", wine_bin,
+                   "--wine-prefix", env["WINEPREFIX"], "--override-exe",
+                   str(ghostwire_bin.relative_to(ghostwire_install)),
+                   "--", "-dx11", "-d3d11"]
+    elif target_bin and wine_bin:
         print(f"Target game binary detected: {target_bin}", flush=True)
         try:
             configure_mouse(str(wine_bin), env)

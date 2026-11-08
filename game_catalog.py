@@ -103,11 +103,19 @@ def login_legendary(auth_code: str) -> Tuple[bool, str]:
             timeout=45,
             env=os.environ.copy()
         )
-        output = res.stdout + res.stderr
-        if res.returncode == 0 or "Successfully" in output or "Logged in" in output:
-            subprocess.run(prefix + ["legendary", "list-games"], capture_output=True, timeout=60, env=os.environ.copy())
-            return True, "Successfully logged in to Epic Games!"
-        return False, output.strip()[:140] if output.strip() else "Authentication failed."
+        # Legendary can log an authentication failure yet exit with code 0.
+        # Its saved account file is the actual success signal.
+        account = _read_json(HOME / ".config" / "legendary" / "user.json")
+        if not isinstance(account, dict) or not account.get("displayName"):
+            return False, "Epic login was not saved. Open the login page for a fresh authorization code and try again."
+        try:
+            games = subprocess.run(prefix + ["legendary", "list-games"],
+                                   capture_output=True, timeout=90, env=os.environ.copy())
+            if games.returncode != 0:
+                return True, "Epic login saved, but the game library could not sync. Use Sync Library to retry."
+        except (OSError, subprocess.TimeoutExpired):
+            return True, "Epic login saved, but the game library could not sync. Use Sync Library to retry."
+        return True, "Epic login saved and game library synced."
     except Exception as exc:
         return False, str(exc)[:120]
 

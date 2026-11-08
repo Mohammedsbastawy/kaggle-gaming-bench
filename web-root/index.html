@@ -1,0 +1,24 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><title>7BZ Dev Cloud Game</title><meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no"><meta name="mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"><link rel="apple-touch-icon" href="icon-512.png"><link rel="manifest" href="manifest.json" crossorigin="use-credentials"><link rel="icon" type="image/png" href="icon.png"><script type="module" crossorigin src="./assets/index-BpOBp7NB.js"></script><link rel="stylesheet" crossorigin href="./assets/index-DtYiHbRm.css">
+<!-- 7BZ Dev Cloud Game: Keyboard Lock – prevents Esc from exiting browser fullscreen -->
+<script>
+(function(){
+  var _kl=false;
+  function _lock(){
+    if(document.fullscreenElement && navigator.keyboard && navigator.keyboard.lock){
+      navigator.keyboard.lock(['Escape']).then(function(){_kl=true;
+        console.log('[GameLab] Keyboard locked – Esc captured for gaming');
+      }).catch(function(e){console.log('[GameLab] Keyboard lock:',e.message);});
+    }
+  }
+  document.addEventListener('fullscreenchange',function(){
+    if(document.fullscreenElement){_lock();}
+    else if(_kl && navigator.keyboard && navigator.keyboard.unlock){navigator.keyboard.unlock();_kl=false;}
+  });
+  _lock();
+})();
+</script>
+
+<!-- 7BZ Dev Cloud Game HUD -->
+<link rel="stylesheet" href="7bz-hud.css?v=1794156581">
+</head><body><div id="app"></div><div id="root"></div><div id="touch-gamepad-host"></div><script defer src="7bz-hud.js?v=1794161716"></script>
+</body></html>

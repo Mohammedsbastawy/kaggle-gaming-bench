@@ -385,3 +385,27 @@ echo "    BENCH ENVIRONMENT SETUP COMPLETED SUCCESSFULLY!       "
 echo "=========================================================="
 wineserver -k 2>/dev/null || true
 exit 0
+
+
+# Patch selkies socket permissions so non-root users (gamer) can connect to gamepad sockets
+python3 - << 'PATCH_EOF'
+import glob
+for p in glob.glob("/usr/local/lib/python*/dist-packages/selkies/input_handler.py") + glob.glob("/tmp/kaggle-game-dev-bench/selkies-source/src/selkies/input_handler.py"):
+    try:
+        txt = open(p).read()
+        t1 = "self.server = await asyncio.start_unix_server(self._serve, path=sock)"
+        s1 = t1 + "
+                try: os.chmod(sock, 0o666)
+                except Exception: pass"
+        t2 = "path=interposer_socket_path
+            )"
+        s2 = t2 + "
+            try: os.chmod(interposer_socket_path, 0o666)
+            except Exception: pass"
+        if t1 in txt and s1 not in txt: txt = txt.replace(t1, s1)
+        if t2 in txt and s2 not in txt: txt = txt.replace(t2, s2)
+        open(p, "w").write(txt)
+        print(f"Patched {p}")
+    except Exception as e:
+        print(f"Failed {p}: {e}")
+PATCH_EOF
