@@ -178,13 +178,53 @@ async def gpus_handler(_request: web.Request) -> web.Response:
     return web.json_response({"gpus": get_gpu_metrics()})
 
 
+CONTROLLER_KEYS = {"Escape", "Return", "BackSpace", "Tab", "Up", "Down", "Left", "Right", "space", "Home", "End"}
+
+
+async def controller_action(request: web.Request) -> web.Response:
+    """Send bounded controller UI actions to the existing X desktop."""
+    if request.headers.get("X-7BZ-Action") != "hud":
+        raise web.HTTPForbidden(text="Missing HUD action header")
+    try:
+        data = await request.json()
+        action = data.get("action")
+        if action == "move":
+            x, y = float(data["x"]), float(data["y"])
+            if not (0 <= x <= 1 and 0 <= y <= 1):
+                raise ValueError("Coordinates out of range")
+            geometry = subprocess.check_output(["xdotool", "getdisplaygeometry"], text=True, timeout=2).split()
+            width, height = int(geometry[0]), int(geometry[1])
+            command = ["xdotool", "mousemove", str(round(x * (width - 1))), str(round(y * (height - 1)))]
+        elif action == "click" and data.get("button") in (1, 3):
+            command = ["xdotool", "click", str(data["button"])]
+        elif action == "scroll" and data.get("direction") in ("up", "down"):
+            command = ["xdotool", "click", "4" if data["direction"] == "up" else "5"]
+        elif action == "key" and data.get("key") in CONTROLLER_KEYS:
+            command = ["xdotool", "key", "--clearmodifiers", data["key"]]
+        elif action == "text" and isinstance(data.get("text"), str) and len(data["text"]) == 1 and data["text"].isprintable():
+            command = ["xdotool", "type", "--clearmodifiers", "--delay", "0", "--", data["text"]]
+        elif action == "home":
+            command = ["wmctrl", "-a", "7BZ Dev Cloud Game"]
+        else:
+            raise ValueError("Unknown controller action")
+        result = await asyncio.to_thread(subprocess.run, command, capture_output=True, text=True, timeout=3)
+        if result.returncode:
+            raise RuntimeError(result.stderr.strip() or "Desktop input failed")
+        return web.json_response({"ok": True})
+    except (ValueError, TypeError, KeyError) as exc:
+        raise web.HTTPBadRequest(text=str(exc)) from exc
+    except (RuntimeError, OSError, subprocess.TimeoutExpired) as exc:
+        raise web.HTTPServiceUnavailable(text=str(exc)) from exc
+
+
 def main() -> None:
     """Serve narrow session actions on the loopback-only control port."""
     app = web.Application(client_max_size=16 * 1024)
     app.add_routes([web.get("/health", health), web.get("/status", status),
                     web.get("/catalog", catalog), web.get("/gpus", gpus_handler),
                     web.post("/reset", reset),
-                    web.get("/input-mode", input_mode_get), web.post("/input-mode", input_mode_post)])
+                    web.get("/input-mode", input_mode_get), web.post("/input-mode", input_mode_post),
+                    web.post("/controller", controller_action)])
     web.run_app(app, host="127.0.0.1", port=PORT, access_log=None)
 
 

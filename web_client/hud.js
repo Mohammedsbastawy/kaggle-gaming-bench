@@ -11,7 +11,9 @@
     expanded: false, qualityInitialized: false,
     rtts: [], audio: true, pointer: false, esc: false, toastTimer: 0,
     hasGamepad: false, inputMode: "mouse_keyboard",
-    hidden: false,
+    hidden: false, controllerMode: "desktop", keyboardOpen: false,
+    padButtons: [], cursorX: .5, cursorY: .5, lastMove: 0, lastScroll: 0,
+    keyIndex: 0, shifted: false, controllerBusy: false, controllerErrorAt: 0,
   };
   try { state.hidden = localStorage.getItem("sevenBzHudHidden") === "1"; } catch (_) {}
 
@@ -53,17 +55,25 @@
             <button class="seven-button" data-action="fullscreen">Fullscreen</button>
             <button class="seven-button" data-action="pointer">Gaming Mode (Lock Mouse)</button>
             <button class="seven-button" data-action="mode" data-stat="modename">🖱️ Mode: M+K</button>
+            <button class="seven-button" data-action="controller">🎮 Desktop Cursor</button>
+            <button class="seven-button" data-action="keyboard">⌨ On-screen Keyboard</button>
+            <button class="seven-button" data-action="home">7BZ Home</button>
             <button class="seven-button" data-action="esc">Esc Lock</button>
             <button class="seven-button" data-action="audio">Audio Unmute</button>
             <button class="seven-button seven-danger" data-action="reset">Force Kill / Exit Frozen Game</button>
           </div>
         </div>
-        <div class="seven-notice"><span>Input tip: In FPS games (Blood West), use Gaming Mode for unconstrained 360° mouse view. If using Gamepad, press any button on the controller to connect.</span><span>Ctrl+Shift+H: hide bar</span></div>
+        <div class="seven-notice"><span>Controller: View switches Desktop/Game. Desktop: stick moves, A clicks, B goes back, X right-clicks, Y types, Start enters, D-pad navigates, right stick scrolls. Press both sticks for 7BZ Home.</span><span>Ctrl+Shift+H: hide bar</span></div>
       </div>
     </div>
     <button class="seven-reveal" data-action="show" aria-label="Show 7BZ top bar" title="Show 7BZ top bar">Show 7BZ ▾</button>
     <div class="seven-toast" role="status"></div>`;
   document.body.appendChild(hud);
+  const keyboard = document.createElement("div");
+  keyboard.id = "seven-controller-keyboard";
+  keyboard.setAttribute("aria-label", "Controller on-screen keyboard");
+  keyboard.innerHTML = '<div class="seven-keyboard-heading">On-screen keyboard · D-pad select · A type · X delete · Start enter · B close</div><div class="seven-keyboard-grid"></div>';
+  document.body.appendChild(keyboard);
   hud.classList.toggle("is-hidden", state.hidden);
 
   const one = (selector) => hud.querySelector(selector);
@@ -82,6 +92,110 @@
     return replaced === window.location.pathname ? "/proxy/8766" : replaced;
   }
 
+  async function controllerSend(payload, quiet = false) {
+    try {
+      const response = await fetch(`${controlBase()}/controller`, {
+        method: "POST", credentials: "same-origin",
+        headers: { "X-7BZ-Action": "hud", "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    } catch (error) {
+      if (!quiet || Date.now() - state.controllerErrorAt > 10000) {
+        toast(`Controller input unavailable: ${error.message}`);
+        state.controllerErrorAt = Date.now();
+      }
+    }
+  }
+
+  const letters = "abcdefghijklmnopqrstuvwxyz0123456789.,/-_@:'?!".split("");
+  const keyboardKeys = [...letters, "Space", "Backspace", "Enter"];
+  function drawKeyboard() {
+    const grid = keyboard.querySelector(".seven-keyboard-grid");
+    grid.replaceChildren();
+    keyboardKeys.forEach((key, index) => {
+      const cell = document.createElement("button");
+      cell.type = "button";
+      cell.textContent = state.shifted && key.length === 1 ? key.toUpperCase() : key;
+      cell.className = "seven-keyboard-key" + (index === state.keyIndex ? " is-selected" : "");
+      cell.addEventListener("click", () => { state.keyIndex = index; typeSelected(); });
+      grid.appendChild(cell);
+    });
+  }
+  function showKeyboard(open) {
+    if (open && state.controllerMode !== "desktop") setControllerMode("desktop");
+    state.keyboardOpen = open;
+    keyboard.classList.toggle("is-open", open);
+    if (open) drawKeyboard();
+  }
+  function typeSelected() {
+    const key = keyboardKeys[state.keyIndex];
+    if (key === "Space") controllerSend({ action: "key", key: "space" });
+    else if (key === "Backspace") controllerSend({ action: "key", key: "BackSpace" });
+    else if (key === "Enter") controllerSend({ action: "key", key: "Return" });
+    else controllerSend({ action: "text", text: state.shifted ? key.toUpperCase() : key });
+  }
+  function setControllerMode(mode) {
+    state.controllerMode = mode;
+    if (mode === "game") showKeyboard(false);
+    post({ type: "gamepadControl", enabled: mode === "game" });
+    button("controller").textContent = mode === "desktop" ? "🎮 Desktop Cursor" : "🎮 Game Input";
+    button("controller").classList.toggle("is-active", mode === "desktop");
+    toast(mode === "desktop" ? "Controller controls desktop. View switches to game input." : "Controller controls game. View returns to desktop.");
+  }
+  function padAxis(value) { return Math.abs(value || 0) > .18 ? value : 0; }
+  function controllerFrame(now) {
+    const pad = navigator.getGamepads ? Array.from(navigator.getGamepads()).find(Boolean) : null;
+    if (pad) {
+      const pressed = (index) => Boolean(pad.buttons[index]?.pressed);
+      const edge = (index) => pressed(index) && !state.padButtons[index];
+      if (edge(8)) setControllerMode(state.controllerMode === "desktop" ? "game" : "desktop");
+      if (state.controllerMode === "desktop") {
+        if (edge(10) && pressed(11) || edge(11) && pressed(10)) controllerSend({ action: "home" });
+        if (edge(3)) showKeyboard(!state.keyboardOpen);
+        if (state.keyboardOpen) {
+          if (edge(1)) showKeyboard(false);
+          if (edge(2)) controllerSend({ action: "key", key: "BackSpace" });
+          if (edge(9)) controllerSend({ action: "key", key: "Return" });
+          if (edge(4) || edge(5)) { state.shifted = !state.shifted; drawKeyboard(); }
+          const columns = 10;
+          if (edge(12)) state.keyIndex = Math.max(0, state.keyIndex - columns);
+          if (edge(13)) state.keyIndex = Math.min(keyboardKeys.length - 1, state.keyIndex + columns);
+          if (edge(14)) state.keyIndex = Math.max(0, state.keyIndex - 1);
+          if (edge(15)) state.keyIndex = Math.min(keyboardKeys.length - 1, state.keyIndex + 1);
+          if ([12, 13, 14, 15].some(edge)) drawKeyboard();
+          if (edge(0)) typeSelected();
+        } else {
+          if (edge(0)) controllerSend({ action: "click", button: 1 });
+          if (edge(1)) controllerSend({ action: "key", key: "Escape" });
+          if (edge(2)) controllerSend({ action: "click", button: 3 });
+          if (edge(9)) controllerSend({ action: "key", key: "Return" });
+          for (const [index, key] of [[12, "Up"], [13, "Down"], [14, "Left"], [15, "Right"]]) {
+            if (edge(index)) controllerSend({ action: "key", key });
+          }
+          if (edge(4)) controllerSend({ action: "key", key: "Tab" });
+          if (edge(5)) controllerSend({ action: "key", key: "Return" });
+          const dx = padAxis(pad.axes[0]), dy = padAxis(pad.axes[1]);
+          if ((dx || dy) && now - state.lastMove > 50 && !state.controllerBusy) {
+            state.lastMove = now;
+            state.cursorX = Math.max(0, Math.min(1, state.cursorX + dx * .018));
+            state.cursorY = Math.max(0, Math.min(1, state.cursorY + dy * .025));
+            state.controllerBusy = true;
+            controllerSend({ action: "move", x: state.cursorX, y: state.cursorY }, true)
+              .finally(() => { state.controllerBusy = false; });
+          }
+          const scroll = padAxis(pad.axes[3]);
+          if (scroll && now - state.lastScroll > 130) {
+            state.lastScroll = now;
+            controllerSend({ action: "scroll", direction: scroll < 0 ? "up" : "down" }, true);
+          }
+        }
+      }
+      state.padButtons = pad.buttons.map((item) => Boolean(item.pressed));
+    } else state.padButtons = [];
+    requestAnimationFrame(controllerFrame);
+  }
+
   function checkGamepads() {
     try {
       const pads = navigator.getGamepads ? Array.from(navigator.getGamepads()).filter(Boolean) : [];
@@ -92,7 +206,7 @@
         if (!state.hasGamepad) {
           state.hasGamepad = true;
           toast(`🎮 Controller Connected: ${name.slice(0, 25)}`);
-          post({ type: "gamepadControl", enabled: true });
+          setControllerMode("desktop");
         }
       } else {
         stat("pad", "None");
@@ -271,6 +385,9 @@
     if (action === "fullscreen") post({ type: "requestFullscreen" });
     if (action === "pointer") togglePointer();
     if (action === "mode") toggleInputMode();
+    if (action === "controller") setControllerMode(state.controllerMode === "desktop" ? "game" : "desktop");
+    if (action === "keyboard") showKeyboard(!state.keyboardOpen);
+    if (action === "home") controllerSend({ action: "home" });
     if (action === "esc") toggleEsc();
     if (action === "audio") {
       state.audio = true;
@@ -318,7 +435,7 @@
   window.addEventListener("gamepadconnected", (event) => {
     state.hasGamepad = true;
     toast(`🎮 Gamepad Connected: ${event.gamepad.id.slice(0, 30)}`);
-    post({ type: "gamepadControl", enabled: true });
+    setControllerMode("desktop");
     checkGamepads();
   });
   window.addEventListener("gamepaddisconnected", () => {
@@ -331,4 +448,5 @@
   syncInputMode();
   setInterval(render, 1000);
   setTimeout(render, 700);
+  requestAnimationFrame(controllerFrame);
 })();

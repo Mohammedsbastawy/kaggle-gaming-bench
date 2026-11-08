@@ -74,6 +74,13 @@
 .seven-toast { position: absolute; top: calc(100% + 8px); right: 8px; max-width: 380px; padding: 10px 14px; border-radius: 11px; background: rgba(7,12,25,.94); border: 1px solid var(--seven-line); box-shadow: 0 12px 30px rgba(0,0,0,.36); font-size: 12px; opacity: 0; transform: translateY(-5px); transition: .18s ease; pointer-events: none; }
 .seven-toast.is-visible { opacity: 1; transform: none; }
 
+#seven-controller-keyboard { display: none; position: fixed; z-index: 2147483001; left: 50%; bottom: 34px; transform: translateX(-50%); width: min(720px, calc(100vw - 20px)); max-height: 45vh; overflow-y: auto; padding: 12px; border: 1px solid var(--seven-line); border-radius: 16px; background: rgba(9, 16, 32, .97); color: var(--seven-text); box-shadow: 0 18px 55px rgba(0,0,0,.6); font-family: Inter, ui-sans-serif, system-ui, sans-serif; }
+#seven-controller-keyboard.is-open { display: block; }
+.seven-keyboard-heading { margin-bottom: 10px; text-align: center; font-size: 13px; font-weight: 650; }
+.seven-keyboard-grid { display: grid; grid-template-columns: repeat(10, minmax(0, 1fr)); gap: 5px; }
+.seven-keyboard-key { min-height: 40px; border: 1px solid rgba(255,255,255,.13); border-radius: 7px; background: rgba(255,255,255,.08); color: inherit; font: inherit; font-size: 14px; cursor: pointer; }
+.seven-keyboard-key.is-selected, .seven-keyboard-key:focus-visible { border-color: var(--seven-cyan); background: rgba(72,215,255,.3); outline: 2px solid var(--seven-cyan); }
+
 @media (max-width: 850px) {
   .seven-brand { min-width: auto; }
   .seven-brand-name { display: none; }
