@@ -196,7 +196,7 @@ nohup env DISPLAY=:1 XAUTHORITY="$BENCH/nvidia-Xauthority" \
     SELKIES_JS_SOCKET_PATH="$SELKIES_JS_SOCKET_PATH" \
     python3 -m selkies --port="$PORT" --enable-basic-auth=false \
     --mode=websockets --allowed-origins="$ORIGIN" \
-    --framerate=30-30 --video-bitrate=7000,800-10000 \
+    --framerate=30-30 --video-bitrate=3500,800-6000 \
     --rate-control-mode=cbr --congestion-control=true \
     --backpressure-queue-size=4 \
     --command-enabled=false --file-transfers=none --printing-enabled=false \

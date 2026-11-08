@@ -9,6 +9,7 @@ import os
 from pathlib import Path
 import re
 import shutil
+import struct
 import subprocess
 import sys
 
@@ -424,6 +425,75 @@ def configure_dishonored_mouse(target_bin, gamer_home):
             print(f"Dishonored mouse profile could not be saved: {exc}", file=sys.stderr)
 
 
+def configure_ghostrunner(target_bin, wineprefix):
+    """Use a playable T4 profile while retaining the 1080p streamed desktop."""
+    if target_bin.name.casefold() != "ghostrunner-win64-shipping.exe":
+        return
+    settings = (Path(wineprefix) / "drive_c/users/gamer/AppData/Local/Ghostrunner/Saved")
+    config = settings / "Config/WindowsNoEditor/GameUserSettings.ini"
+    values = {
+        b"sg.ResolutionQuality": b"75.000000",
+        b"sg.ViewDistanceQuality": b"1",
+        b"sg.AntiAliasingQuality": b"1",
+        b"sg.ShadowQuality": b"1",
+        b"sg.PostProcessQuality": b"1",
+        b"sg.TextureQuality": b"2",
+        b"sg.EffectsQuality": b"1",
+        b"sg.FoliageQuality": b"1",
+        b"sg.ShadingQuality": b"1",
+        b"ResolutionScale": b"75",
+        b"FrameRateLimit": b"60.000000",
+    }
+    try:
+        original = config.read_bytes()
+        updated = original
+        for key, value in values.items():
+            updated = re.sub(rb"(?m)^" + re.escape(key) + rb"=[^\r\n]*",
+                             key + b"=" + value, updated, count=1)
+        if updated != original:
+            backup = config.with_name(config.name + ".7bz-original")
+            if not backup.exists():
+                backup.write_bytes(original)
+            config.write_bytes(updated)
+    except FileNotFoundError:
+        pass
+    except OSError as exc:
+        print(f"Ghostrunner graphics profile could not be saved: {exc}", file=sys.stderr)
+
+    # Ghostrunner also stores its menu settings as Unreal integer properties.
+    # Change only recognized fields and preserve the original save as a backup.
+    save = settings / "SaveGames/GhostrunnerSettingsGraphics.sav"
+    adjustments = {"ResolutionScale": 75, "PostProcessQuality": 1,
+                   "ShadowQuality": 1, "TexturesQuality": 2,
+                   "EffectsQuality": 1, "Brightness": 70}
+    try:
+        original = save.read_bytes()
+        updated = bytearray(original)
+        for key, target in adjustments.items():
+            start = original.find(key.encode() + b"\0")
+            if start < 0:
+                continue
+            value_tag = original.find(b"Value\0", start, start + 150)
+            int_tag = original.find(b"IntProperty\0", value_tag, value_tag + 40)
+            if value_tag < 0 or int_tag < 0:
+                continue
+            offset = int_tag + len(b"IntProperty\0")
+            if original[offset:offset + 9] != b"\x04\0\0\0\0\0\0\0\0":
+                continue
+            offset += 9
+            current = struct.unpack_from("<i", original, offset)[0]
+            if (key == "Brightness" and current < target) or (key != "Brightness" and current > target):
+                struct.pack_into("<i", updated, offset, target)
+        if updated != original:
+            backup = save.with_name(save.name + ".7bz-original")
+            if not backup.exists():
+                backup.write_bytes(original)
+            save.write_bytes(updated)
+            print("Ghostrunner graphics set to balanced quality and brighter image.", flush=True)
+    except (OSError, struct.error) as exc:
+        print(f"Ghostrunner settings save could not be adjusted: {exc}", file=sys.stderr)
+
+
 def select_graphics_backend(facts, preference="auto", is_64bit=True):
     """Select only paths whose required presentation probe succeeded."""
     if preference not in ("auto", "dxvk", "wined3d"):
@@ -601,6 +671,11 @@ def launch(app, wine, local_path=None):
     elif target_bin and wine_bin:
         print(f"Target game binary detected: {target_bin}", flush=True)
         configure_dishonored_mouse(target_bin, env["HOME"])
+        configure_ghostrunner(target_bin, env["WINEPREFIX"])
+        if target_bin.name.casefold() == "ghostrunner-win64-shipping.exe":
+            # WineD3D emits repeated GL debug errors for this game. The log can
+            # grow by tens of MB per session and adds avoidable CPU and I/O.
+            env["WINEDEBUG"] = "-all"
         try:
             configure_mouse(str(wine_bin), env)
         except Exception:

@@ -124,7 +124,7 @@ nohup env CUDA_VISIBLE_DEVICES="$ENCODER_DEVICE" \
     SELKIES_JS_SOCKET_PATH=/tmp \
     python3 -m selkies --port="$PORT" --enable-basic-auth=false \
     --mode=websockets --allowed-origins="$ORIGIN" \
-    --encoder=h264enc --framerate=30-30 --video-bitrate=7000,800-10000 \
+    --encoder=h264enc --framerate=30-30 --video-bitrate=3500,800-6000 \
     --rate-control-mode=cbr --congestion-control=true \
     --backpressure-queue-size=4 \
     --command-enabled=false --file-transfers=none --printing-enabled=false \
