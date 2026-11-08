@@ -482,16 +482,24 @@ def launch_game(item: Dict[str, Any]) -> str:
         except Exception:
             pass
 
+        proc = active_proc
+        title = active_game_title
+
         def watch():
-            active_proc.wait()
+            global message
+            result = proc.wait()
             try:
                 from session_control import clear_active_game
-                clear_active_game(active_proc.pid)
+                clear_active_game(proc.pid)
             except Exception:
                 pass
+            if result != 0:
+                # Let the click handler publish its initial "Launching" status first.
+                time.sleep(0.25)
+                message = f"{title} failed to start (exit {result}). See dashboard-launch.log."
 
         threading.Thread(target=watch, daemon=True).start()
-        return f"Launching {active_game_title} on Direct Xorg..."
+        return f"Launching {active_game_title} on the GPU desktop..."
     except Exception as exc:
         return f"Launch failed: {str(exc)[:60]}"
 
@@ -804,7 +812,7 @@ def draw_left_card():
 
     toggles_list = [
         ("boost", "GPU BOOST (G0/G1)"),
-        ("direct_stream", "DIRECT XORG STREAM"),
+        ("direct_stream", "GPU GAME STREAM"),
         ("gamepad", "GAMEPAD INTERPOSER")
     ]
     for key, label in toggles_list:
@@ -888,7 +896,7 @@ def draw_center_hero():
     # Game Meta line (above buttons)
     size_str = game.get("size", "44.5 GiB")
     ver = game.get("version", "1.3.1")
-    meta_line = f"FOOTPRINT: {size_str}   •   VERSION: {ver}   •   DIRECT XORG :1 (TESLA T4)"
+    meta_line = f"FOOTPRINT: {size_str}   •   VERSION: {ver}   •   TESLA T4 GPU"
     screen.blit(font_small.render(meta_line, True, (210, 225, 250)), (310, 305))
 
     # Interactive Action Buttons
@@ -1069,7 +1077,7 @@ def draw_right_card():
             ("FOOTPRINT", game.get("size", "44.5 GiB")),
             ("VERSION", game.get("version", "1.3.1")),
             ("STATUS", "INSTALLED" if game.get("is_installed") else "OWNED IN CLOUD"),
-            ("RENDER GPU", "GPU 0 (Tesla T4 Direct :1)"),
+            ("RENDER GPU", "GPU 0 (Tesla T4)"),
             ("ENCODE GPU", "GPU 1 (Tesla T4 NVENC)"),
             ("AUDIO SINK", "PulseAudio Native 48kHz"),
             ("RUNNER", "Wine-GE-Proton8-26"),
@@ -1719,6 +1727,9 @@ def main():
             draw_center_hero()
             draw_quick_launch()
             draw_right_card()
+            status_color = DANGER_RED if ("failed" in message.lower() or "error" in message.lower()) else CYAN_NEON
+            pygame.draw.rect(screen, (12, 20, 32), (32, 698, 1218, 20), border_radius=4)
+            screen.blit(font_small.render(clipped(message, font_small, 1190), True, status_color), (42, 702))
         else:
             draw_workspace()
 

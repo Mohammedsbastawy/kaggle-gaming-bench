@@ -124,11 +124,26 @@ env.update(
     DIRECT_STREAM_PORT="8080"
 )
 
-# 4. Launch unified direct NVIDIA Xorg stream
-direct_script = BENCH / "start_direct_stream.sh"
+# 4. Prefer Mesa GLX capture with NVIDIA VirtualGL rendering. Kaggle's
+# headless NVIDIA Xorg can crash, while the ordinary Selkies Xvfb disables GLX.
+game_script = BENCH / "start_gpu_game_stream.sh"
 started = False
+if game_script.is_file():
+    try:
+        print("▶ Launching GPU game stream on port 8080...", flush=True)
+        res = subprocess.run(["bash", str(game_script)], env=env,
+                             capture_output=True, text=True, timeout=45)
+        if res.returncode == 0:
+            print(f"✓ {res.stdout.strip()}", flush=True)
+            started = True
+        else:
+            print(f"GPU game stream notice: {res.stdout[-300:]} {res.stderr[-300:]}", flush=True)
+    except Exception as exc:
+        print(f"GPU game stream exception: {exc}", flush=True)
 
-if direct_script.is_file():
+# 5. Try direct NVIDIA Xorg where the host supports a stable display.
+direct_script = BENCH / "start_direct_stream.sh"
+if not started and direct_script.is_file():
     try:
         print("▶ Launching direct NVIDIA Xorg stream on port 8080...", flush=True)
         res = subprocess.run(
@@ -146,7 +161,7 @@ if direct_script.is_file():
     except Exception as e:
         print(f"Direct stream launch exception: {e}", flush=True)
 
-# 5. Fallback to standard Selkies desktop session if direct Xorg did not start
+# 6. Fallback to standard Selkies desktop session if GPU paths did not start.
 if not started:
     desktop_script = BENCH / "start_desktop.sh"
     print("▶ Starting standard Selkies desktop fallback on port 8080...", flush=True)
@@ -163,7 +178,7 @@ if not started:
     except Exception as e:
         print(f"Fallback launch failed: {e}", flush=True)
 
-# 6. Verify health
+# 7. Verify health
 stream_ready = False
 for attempt in range(30):
     time.sleep(1)
