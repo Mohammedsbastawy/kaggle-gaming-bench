@@ -171,10 +171,7 @@ apt-get install -y --no-install-recommends -o DPkg::Lock::Timeout=120 wine-gecko
 
 # 6. Python streaming, interface and gaming packages
 python3 -m pip install --no-cache-dir \
-    'selkies[jupyter]==2.1.0' 'pygame==2.6.1' 'psutil'
-if [ "$SETUP_PROFILE" = full ]; then
-    python3 -m pip install --no-cache-dir 'legendary-gl'
-fi
+    'selkies[jupyter]==2.1.0' 'pygame==2.6.1' 'psutil' 'legendary-gl==0.21.1'
 
 # 7. Optional storefront suite. The local developer desktop needs none of it.
 if [ "$SETUP_PROFILE" = full ]; then

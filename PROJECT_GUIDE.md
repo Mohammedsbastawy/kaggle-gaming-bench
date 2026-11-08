@@ -12,8 +12,8 @@ Git holds the application and boot code. `build_dev_notebook.py` generates the s
 
 | Profile | Use | Setup |
 | --- | --- | --- |
-| `local` (default) | Developer `.exe` games | Desktop, browser, aria2, Wine/Wine-GE, GPU translation layers, Selkies, gamepad support |
-| `full` | Historical storefront suite | Everything in `local`, plus Steam, Heroic, Legendary, Lutris, Minigalaxy, EA installer, storefront libraries and GUI smoke tests |
+| `local` (default) | Developer `.exe` games and Epic login | Desktop, browser, aria2, Wine/Wine-GE, GPU translation layers, Selkies, gamepad support, Legendary |
+| `full` | Historical storefront suite | Everything in `local`, plus Steam, Heroic, Lutris, Minigalaxy, EA installer, storefront libraries and GUI smoke tests |
 
 The `full` path remains available for compatibility. The local path avoids optional storefront downloads and their repeated setup. Within the same Kaggle session, a `.setup-complete` marker keyed by Git revision and profile skips setup when the required tools are still present. A new Kaggle container has no installed packages or marker; Git alone cannot preserve apt packages, Wine prefixes, or browser binaries across fresh sessions. For a larger cold-start reduction, distribute a compatible prebuilt environment through a Kaggle dataset or image, then verify GPU driver compatibility before changing this path.
 
