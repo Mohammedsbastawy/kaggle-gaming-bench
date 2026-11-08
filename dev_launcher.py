@@ -1556,7 +1556,7 @@ def handle_click(pos: Tuple[int, int]):
     game = get_selected_game()
     if not game:
         # Check if login button in center was clicked (x: 502 to 742, y: 240 to 282)
-        if 502 <= mx <= 742 and 240 <= my <= 282 and not epic_user.get("is_authenticated", False):
+        if 480 <= mx <= 760 and 240 <= my <= 330 and not epic_user.get("is_authenticated", False):
             epic_login_modal = True
             epic_auth_editing = True
             epic_auth_status = ""
