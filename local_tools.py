@@ -169,15 +169,14 @@ def launch_browser(env, url="https://www.google.com"):
     if not binary:
         raise RuntimeError("Google Chrome is not installed. Run 'apt-get install -y /tmp/google-chrome-stable_current_amd64.deb'")
     DOWNLOADS.mkdir(parents=True, exist_ok=True)
+    resolved_env = _resolve_x11_env()
     env = env.copy()
     env.pop("LD_PRELOAD", None)
     env.pop("SELKIES_JS_SOCKET_PATH", None)
     env.pop("SDL_JOYSTICK_DEVICE", None)
-    env.setdefault("DISPLAY", ":1")
-    if Path("/tmp/kaggle-game-dev-bench/nvidia-Xauthority").is_file():
-        env["XAUTHORITY"] = "/tmp/kaggle-game-dev-bench/nvidia-Xauthority"
-    elif (HOME / ".Xauthority").is_file():
-        env["XAUTHORITY"] = str(HOME / ".Xauthority")
+    env["DISPLAY"] = resolved_env["DISPLAY"]
+    if resolved_env.get("XAUTHORITY"):
+        env["XAUTHORITY"] = resolved_env["XAUTHORITY"]
 
     profile = HOME / ".config" / "7bz-browser"
     try:
