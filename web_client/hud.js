@@ -80,6 +80,12 @@
   const one = (selector) => hud.querySelector(selector);
   const stat = (name, text) => { const target = one(`[data-stat="${name}"]`); if (target) target.textContent = text; };
   const button = (name) => one(`[data-action="${name}"]`);
+  const canLockMouse = typeof document.documentElement.requestFullscreen === "function" &&
+    typeof document.body.requestPointerLock === "function" && document.fullscreenEnabled !== false;
+  if (!canLockMouse) {
+    document.body.classList.add("seven-no-pointer-lock");
+    button("pointer").textContent = "Gaming Mode needs Edge or Chrome";
+  }
   const toast = (message) => {
     const target = one(".seven-toast");
     target.textContent = message;
@@ -311,6 +317,10 @@
   }
 
   function togglePointer() {
+    if (!canLockMouse) {
+      toast("Open this stream in a full Edge or Chrome tab to lock the mouse.");
+      return;
+    }
     // Selkies owns fullscreen, pointer lock, and the relative-motion handler.
     // A second requestPointerLock from this HUD can steal its input target.
     post({ type: "requestGamingMode" });

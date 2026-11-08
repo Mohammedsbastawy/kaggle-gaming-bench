@@ -68,6 +68,20 @@ fi
 pulse_user pactl set-default-sink output >/dev/null
 printf '%s' "$PULSE_SERVER" > "$BENCH/pulse-server-path"
 
+# Wine-GE may use its ALSA driver even when PulseAudio is available. Kaggle
+# has no physical ALSA card, so send ALSA's default device to PulseAudio.
+if [ ! -e /home/gamer/.asoundrc ]; then
+    cat > /home/gamer/.asoundrc <<'EOF'
+pcm.!default {
+    type pulse
+}
+ctl.!default {
+    type pulse
+}
+EOF
+    chown gamer:gamer /home/gamer/.asoundrc
+fi
+
 ENCODER_DEVICE=0
 if [ -e /dev/nvidia1 ]; then ENCODER_DEVICE=1; fi
 export DISPLAY PULSE_SERVER
