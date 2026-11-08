@@ -579,6 +579,10 @@ def launch(app, wine, local_path=None):
         except Exception:
             pass
         command = [wine_bin, str(target_bin)]
+        if target_bin.name.lower() == "dishonored.exe":
+            # UE3 otherwise starts this title in an 800x600 window on Xvfb;
+            # the browser maps input against the full 1920x1080 desktop.
+            command.extend(["-fullscreen", "-ResX=1920", "-ResY=1080"])
         if "wolf" in target_bin.name.lower() or "idtech" in target_bin.name.lower():
             command.extend([
                 "+set", "com_skipIntroVideo", "1",
