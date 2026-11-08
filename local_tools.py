@@ -456,15 +456,46 @@ class ExtractionManager:
             return False
 
 
+def _resolve_x11_env() -> dict:
+    """Helper to resolve accurate DISPLAY and XAUTHORITY across desktop sessions."""
+    env = os.environ.copy()
+    display = env.get("DISPLAY") or ":0"
+    env["DISPLAY"] = display
+    if not env.get("XAUTHORITY"):
+        xauth_path_file = Path("/tmp/kaggle-game-dev-bench/xauthority-path")
+        if xauth_path_file.is_file():
+            try:
+                candidate = xauth_path_file.read_text().strip()
+                if candidate and Path(candidate).is_file():
+                    env["XAUTHORITY"] = candidate
+            except Exception:
+                pass
+        if not env.get("XAUTHORITY"):
+            user_xauth = Path.home() / ".Xauthority"
+            if user_xauth.is_file():
+                env["XAUTHORITY"] = str(user_xauth)
+        if not env.get("XAUTHORITY") and Path("/tmp/kaggle-game-dev-bench/nvidia-Xauthority").is_file() and display == ":1":
+            env["XAUTHORITY"] = "/tmp/kaggle-game-dev-bench/nvidia-Xauthority"
+    return env
+
+
 def get_clipboard_text() -> str:
     """Read clipboard text reliably across X11, Selkies, xclip, xsel, and Tkinter."""
-    env = os.environ.copy()
-    env.setdefault("DISPLAY", ":1")
-    if Path("/tmp/kaggle-game-dev-bench/nvidia-Xauthority").is_file():
-        env["XAUTHORITY"] = "/tmp/kaggle-game-dev-bench/nvidia-Xauthority"
+    env = _resolve_x11_env()
 
-    # 1. Try xclip (handles UTF8_STRING and multiple selections)
+    # 1. Try xclip (handles UTF8_STRING, text/plain, STRING across clipboard and primary)
     for sel in ("clipboard", "primary"):
+        for target in ("UTF8_STRING", "text/plain;charset=utf-8", "STRING"):
+            try:
+                res = subprocess.run(
+                    ["xclip", "-selection", sel, "-target", target, "-o"],
+                    capture_output=True, text=True, timeout=1.5,
+                    env=env
+                )
+                if res.returncode == 0 and res.stdout.strip():
+                    return res.stdout.strip()
+            except Exception:
+                pass
         try:
             res = subprocess.run(
                 ["xclip", "-selection", sel, "-o"],
@@ -492,6 +523,11 @@ def get_clipboard_text() -> str:
     # 3. Try tkinter with UTF8_STRING then fallback to standard STRING
     try:
         import tkinter
+        # Apply resolved XAUTHORITY to process env for Tkinter
+        if env.get("XAUTHORITY"):
+            os.environ["XAUTHORITY"] = env["XAUTHORITY"]
+        if env.get("DISPLAY"):
+            os.environ["DISPLAY"] = env["DISPLAY"]
         t = tkinter.Tk()
         t.withdraw()
         val = ""
@@ -522,40 +558,43 @@ def get_clipboard_text() -> str:
 def set_clipboard_text(text: str) -> bool:
     """Set X11 clipboard text using xclip, xsel, and tkinter."""
     success = False
-    env = os.environ.copy()
-    env.setdefault("DISPLAY", ":1")
-    if Path("/tmp/kaggle-game-dev-bench/nvidia-Xauthority").is_file():
-        env["XAUTHORITY"] = "/tmp/kaggle-game-dev-bench/nvidia-Xauthority"
+    env = _resolve_x11_env()
 
     # 1. Try xclip
-    try:
-        p = subprocess.Popen(
-            ["xclip", "-selection", "clipboard"],
-            stdin=subprocess.PIPE,
-            env=env
-        )
-        p.communicate(input=text.encode("utf-8"), timeout=1.5)
-        if p.returncode == 0:
-            success = True
-    except Exception:
-        pass
+    for sel in ("clipboard", "primary"):
+        try:
+            p = subprocess.Popen(
+                ["xclip", "-selection", sel],
+                stdin=subprocess.PIPE,
+                env=env
+            )
+            p.communicate(input=text.encode("utf-8"), timeout=1.5)
+            if p.returncode == 0:
+                success = True
+        except Exception:
+            pass
 
     # 2. Try xsel
-    try:
-        p = subprocess.Popen(
-            ["xsel", "--clipboard", "--input"],
-            stdin=subprocess.PIPE,
-            env=env
-        )
-        p.communicate(input=text.encode("utf-8"), timeout=1.5)
-        if p.returncode == 0:
-            success = True
-    except Exception:
-        pass
+    for flag in ("--clipboard", "--primary"):
+        try:
+            p = subprocess.Popen(
+                ["xsel", flag, "--input"],
+                stdin=subprocess.PIPE,
+                env=env
+            )
+            p.communicate(input=text.encode("utf-8"), timeout=1.5)
+            if p.returncode == 0:
+                success = True
+        except Exception:
+            pass
 
     # 3. Try tkinter
     try:
         import tkinter
+        if env.get("XAUTHORITY"):
+            os.environ["XAUTHORITY"] = env["XAUTHORITY"]
+        if env.get("DISPLAY"):
+            os.environ["DISPLAY"] = env["DISPLAY"]
         t = tkinter.Tk()
         t.withdraw()
         t.clipboard_clear()
