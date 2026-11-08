@@ -31,17 +31,9 @@ else:
     print(f'Preparing 7BZ {PROFILE} profile from Git revision {revision[:12]}...', flush=True)
     env = dict(os.environ, GAMELAB_SETUP_PROFILE=PROFILE)
     started = time.monotonic()
-    restored = False
-    if PROFILE == 'local' and PREREQS == '0':
-        cache = next(Path('/kaggle/input').glob('*/7bz-runtime-cache/manifest.json'), None)
-        if cache:
-            result = subprocess.run(['python3', str(REPO / 'runtime_cache.py'), 'restore',
-                                     str(cache.parent)], env=env)
-            restored = result.returncode == 0
-    if not restored:
-        subprocess.run(['bash', str(REPO / 'setup.sh')], check=True, env=env)
+    subprocess.run(['bash', str(REPO / 'setup.sh')], check=True, env=env)
     marker.write_text(f'{revision}:{PROFILE}:{PREREQS}', encoding='utf-8')
-    print(f'7BZ {"cache restore" if restored else "setup"} complete in {time.monotonic() - started:.1f}s.', flush=True)
+    print(f'7BZ setup complete in {time.monotonic() - started:.1f}s.', flush=True)
 '''
 
 start = '''from pathlib import Path
