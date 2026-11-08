@@ -178,7 +178,7 @@ async def gpus_handler(_request: web.Request) -> web.Response:
     return web.json_response({"gpus": get_gpu_metrics()})
 
 
-CONTROLLER_KEYS = {"Escape", "Return", "BackSpace", "Tab", "Up", "Down", "Left", "Right", "space", "Home", "End"}
+CONTROLLER_KEYS = {"Escape", "Return", "BackSpace", "Tab", "Up", "Down", "Left", "Right", "Page_Up", "Page_Down", "space", "Home", "End"}
 
 
 async def controller_action(request: web.Request) -> web.Response:

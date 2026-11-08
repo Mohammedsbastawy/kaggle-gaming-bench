@@ -63,7 +63,7 @@
             <button class="seven-button seven-danger" data-action="reset">Force Kill / Exit Frozen Game</button>
           </div>
         </div>
-        <div class="seven-notice"><span>Controller: View switches Desktop/Game. Desktop: stick moves, A clicks, B goes back, X right-clicks, Y types, Start enters, D-pad navigates, right stick scrolls. Press both sticks for 7BZ Home.</span><span>Ctrl+Shift+H: hide bar</span></div>
+        <div class="seven-notice"><span>Controller: View switches Desktop/Game. L1/R1 change dashboard tabs, D-pad moves through controls, A selects, B goes back, Y types. Left stick moves cursor; press both sticks for 7BZ Home.</span><span>Ctrl+Shift+H: hide bar</span></div>
       </div>
     </div>
     <button class="seven-reveal" data-action="show" aria-label="Show 7BZ top bar" title="Show 7BZ top bar">Show 7BZ ▾</button>
@@ -173,8 +173,8 @@
           for (const [index, key] of [[12, "Up"], [13, "Down"], [14, "Left"], [15, "Right"]]) {
             if (edge(index)) controllerSend({ action: "key", key });
           }
-          if (edge(4)) controllerSend({ action: "key", key: "Tab" });
-          if (edge(5)) controllerSend({ action: "key", key: "Return" });
+          if (edge(4)) controllerSend({ action: "key", key: "Page_Up" });
+          if (edge(5)) controllerSend({ action: "key", key: "Page_Down" });
           const dx = padAxis(pad.axes[0]), dy = padAxis(pad.axes[1]);
           if ((dx || dy) && now - state.lastMove > 50 && !state.controllerBusy) {
             state.lastMove = now;

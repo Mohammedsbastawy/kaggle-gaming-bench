@@ -61,6 +61,7 @@ TAB_BROWSER = 3
 TAB_LICHII = 4
 TABS = ["Epic Games", "Local Games", "Downloads", "Browser", "Lichii EMU"]
 LICHII_APP = Path("/opt/lichii/squashfs-root/AppRun")
+controller_focus = "tab:0"
 
 
 def lichii_available() -> bool:
@@ -590,6 +591,130 @@ def draw_tabs():
 
         lbl = font_title.render(title, True, text_col)
         screen.blit(lbl, (rect.centerx - lbl.get_width() // 2, rect.centery - lbl.get_height() // 2))
+
+
+def controller_targets() -> List[Tuple[str, "pygame.Rect"]]:
+    """Clickable dashboard controls, in their visual positions."""
+    tab_w = 180
+    total_w = len(TABS) * tab_w + (len(TABS) - 1) * 12
+    start_x = (WIDTH - total_w) // 2
+    targets = [(f"tab:{i}", pygame.Rect(start_x + i * 192, 66, 180, 42))
+               for i in range(len(TABS))]
+
+    def add(name: str, x: int, y: int, w: int, h: int) -> None:
+        targets.append((name, pygame.Rect(x, y, w, h)))
+
+    if epic_login_modal:
+        return [("modal:open", pygame.Rect(265, 222, 280, 38)),
+                ("modal:input", pygame.Rect(265, 344, 705, 42)),
+                ("modal:submit", pygame.Rect(265, 404, 210, 42)),
+                ("modal:paste", pygame.Rect(495, 404, 160, 42)),
+                ("modal:cancel", pygame.Rect(675, 404, 120, 42))]
+    if tab_index == TAB_EPIC:
+        add("epic:all", 48, 325, 98, 30)
+        add("epic:installed", 148, 325, 118, 30)
+        for name, y in (("boost", 400), ("stream", 435), ("gamepad", 470)):
+            add(f"epic:{name}", 45, y, 225, 30)
+        add("epic:login-side", 47, 638, 272, 36)
+        game = get_selected_game()
+        if game:
+            add("epic:main-action", 310, 330, 160, 38)
+            if game.get("is_installed"):
+                add("epic:verify", 462, 330, 95, 38)
+                add("epic:uninstall", 568, 330, 105, 38)
+            for i in range(min(PAGE_SIZE, max(0, len(get_current_games_list()) - carousel_page * PAGE_SIZE))):
+                add(f"epic:card:{i}", 288 + i * 173, 432, 155, 246)
+        elif not epic_user.get("is_authenticated", False):
+            add("epic:login-main", 502, 240, 240, 42)
+    elif tab_index == TAB_LOCAL:
+        for i, name in enumerate(("builds", "downloads", "games", "home")):
+            add(f"local:{name}", 48 + i * 132, 205, 120, 34)
+        for name, x, w in (("up", 590, 90), ("refresh", 690, 105),
+                           ("select-all", 805, 140), ("action", 955, 253)):
+            add(f"local:{name}", x, 205, w, 34)
+        try:
+            for i, _ in enumerate(local_tools.entries(explorer_folder)[explorer_scroll:explorer_scroll + 10]):
+                add(f"local:row:{i}", 48, 286 + i * 34, 1160, 31)
+        except OSError:
+            pass
+    elif tab_index == TAB_DOWNLOADS:
+        add("downloads:url", 48, 192, 920, 36)
+        add("downloads:start", 980, 192, 228, 36)
+        add("downloads:stop", 1040, 244, 168, 28)
+        for name, x, w in (("refresh", 570, 90), ("select-all", 670, 130),
+                           ("action", 810, 285)):
+            add(f"downloads:{name}", x, 289, w, 30)
+        try:
+            for i, _ in enumerate(local_tools.entries(local_tools.DOWNLOADS)[downloads_scroll:downloads_scroll + 8]):
+                add(f"downloads:row:{i}", 48, 328 + i * 33, 1160, 30)
+        except OSError:
+            pass
+    elif tab_index == TAB_BROWSER:
+        add("browser:open", 48, 270, 240, 48)
+        add("browser:downloads", 310, 270, 240, 48)
+    elif tab_index == TAB_LICHII and lichii_available():
+        add("lichii:open", 48, 270, 245, 48)
+    return targets
+
+
+def draw_controller_focus() -> None:
+    target = next((rect for name, rect in controller_targets() if name == controller_focus), None)
+    if target:
+        pygame.draw.rect(screen, MAGENTA_NEON, target.inflate(6, 6), width=2, border_radius=9)
+
+
+def controller_switch_tab(step: int) -> None:
+    global tab_index, selected_game_index, carousel_page, controller_focus, download_editing
+    tab_index = (tab_index + step) % len(TABS)
+    selected_game_index = 0
+    carousel_page = 0
+    download_editing = False
+    controller_focus = f"tab:{tab_index}"
+
+
+def controller_move(direction: str) -> None:
+    """Move focus to the nearest control in the requested direction."""
+    global controller_focus
+    targets = controller_targets()
+    current = next((rect for name, rect in targets if name == controller_focus), None)
+    if current is None:
+        controller_focus = "modal:input" if epic_login_modal else f"tab:{tab_index}"
+        current = next(rect for name, rect in targets if name == controller_focus)
+    if controller_focus.startswith("tab:") and direction == "left":
+        controller_switch_tab(-1)
+        return
+    if controller_focus.startswith("tab:") and direction == "right":
+        controller_switch_tab(1)
+        return
+    if controller_focus.startswith("tab:") and direction == "up":
+        return
+    if controller_focus.startswith("tab:") and direction == "down":
+        candidates = [(name, rect) for name, rect in targets if not name.startswith("tab:")]
+    else:
+        candidates = targets
+    cx, cy = current.center
+    scored = []
+    for name, rect in candidates:
+        if name == controller_focus:
+            continue
+        dx, dy = rect.centerx - cx, rect.centery - cy
+        forward = {"left": -dx, "right": dx, "up": -dy, "down": dy}[direction]
+        cross = abs(dy) if direction in ("left", "right") else abs(dx)
+        if forward > 8:
+            scored.append((forward + cross * 1.4, name))
+    if scored:
+        controller_focus = min(scored)[1]
+
+
+def controller_activate() -> None:
+    global controller_focus
+    target = next((rect for name, rect in controller_targets() if name == controller_focus), None)
+    if target:
+        handle_click(target.center)
+        if epic_login_modal:
+            controller_focus = "modal:input"
+        elif controller_focus.startswith("modal:") or controller_focus.startswith("tab:"):
+            controller_focus = f"tab:{tab_index}"
 
 
 def draw_toggle(rect: pygame.Rect, state: bool):
@@ -1569,6 +1694,7 @@ def main():
     global display, screen, clock, tab_index, selected_game_index, carousel_page, message
     global explorer_scroll, explorer_selected, download_input, download_editing, explorer_folder
     global downloads_scroll, epic_login_modal, epic_auth_code_input, epic_auth_status
+    global controller_focus
     if not pygame or screen is None:
         if not init_graphics():
             print("Pygame display is required to run dev_launcher.", flush=True)
@@ -1592,6 +1718,7 @@ def main():
 
         if epic_login_modal:
             draw_epic_login_modal()
+        draw_controller_focus()
 
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
@@ -1617,6 +1744,30 @@ def main():
                     except OSError:
                         downloads_scroll = 0
             elif event.type == pygame.KEYDOWN:
+                if event.key in (pygame.K_PAGEUP, pygame.K_PAGEDOWN):
+                    if not epic_login_modal:
+                        controller_switch_tab(-1 if event.key == pygame.K_PAGEUP else 1)
+                    continue
+                if event.key in (pygame.K_UP, pygame.K_DOWN, pygame.K_LEFT, pygame.K_RIGHT):
+                    if download_editing:
+                        download_editing = False
+                    controller_move({pygame.K_UP: "up", pygame.K_DOWN: "down",
+                                     pygame.K_LEFT: "left", pygame.K_RIGHT: "right"}[event.key])
+                    continue
+                if event.key == pygame.K_ESCAPE:
+                    if epic_login_modal:
+                        epic_login_modal = False
+                    elif download_editing:
+                        download_editing = False
+                    else:
+                        controller_focus = f"tab:{tab_index}"
+                    continue
+                if event.key in (pygame.K_RETURN, pygame.K_SPACE) and not download_editing:
+                    controller_activate()
+                    continue
+                if event.key == pygame.K_TAB and not epic_login_modal:
+                    controller_switch_tab(1)
+                    continue
                 if epic_login_modal:
                     if event.key == pygame.K_ESCAPE:
                         epic_login_modal = False
@@ -1656,7 +1807,7 @@ def main():
                     explorer_folder = explorer_folder.parent
                     explorer_scroll = 0
                     continue
-                if tab_index == TAB_LOCAL and event.key in (pygame.K_UP, pygame.K_DOWN, pygame.K_RETURN):
+                if tab_index == TAB_LOCAL and event.key == pygame.K_RETURN:
                     try:
                         listing = local_tools.entries(explorer_folder)
                         if event.key in (pygame.K_UP, pygame.K_DOWN) and listing:
