@@ -99,6 +99,12 @@ for attempt in $(seq 1 30); do
 done
 curl -fsS "http://127.0.0.1:${PORT}/api/health" >/dev/null
 
+# A live session may already have its game desktop and dashboard on :2.
+if [ "${GAME_STREAM_ONLY:-0}" = 1 ]; then
+    echo "NVIDIA VirtualGL capture ready on port $PORT"
+    exit 0
+fi
+
 start_gamer_program() {
     local label="$1"
     shift
