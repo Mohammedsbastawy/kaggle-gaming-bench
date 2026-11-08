@@ -27,6 +27,12 @@ chmod -R 666 /dev/input 2>/dev/null || true
     chmod 666 /tmp/selkies_*.sock /run/user/*/selkies_*.sock 2>/dev/null || true
     ln -sf /run/user/0/selkies_*.sock /tmp/ 2>/dev/null || true
     ln -sf /tmp/selkies_*.sock /run/user/1000/ 2>/dev/null || true
+    for d in /tmp/selkies_web*; do
+        if [ -d "$d" ] && [ ! -f "$d/7bz-hud.js" ]; then
+            cp -f /tmp/kaggle-game-dev-bench/web-root/7bz-hud.* "$d/" 2>/dev/null || true
+            cp -f /tmp/kaggle-game-dev-bench/web-root/index.html "$d/" 2>/dev/null || true
+        fi
+    done
     sleep 2
 done) &
 
