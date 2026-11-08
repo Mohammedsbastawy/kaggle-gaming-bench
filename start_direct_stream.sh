@@ -152,7 +152,8 @@ start_desktop() {
     DISPLAY=:1 XAUTHORITY="$BENCH/nvidia-Xauthority" xhost +local: 2>/dev/null || true
     DISPLAY=:1 XAUTHORITY="$BENCH/nvidia-Xauthority" xhost +si:localuser:gamer 2>/dev/null || true
 
-    chmod 666 "$SELKIES_JS_SOCKET_PATH"/*.sock 2>/dev/null || true
+    chgrp gamer "$SELKIES_JS_SOCKET_PATH"/*.sock 2>/dev/null || true
+    chmod 770 "$SELKIES_JS_SOCKET_PATH"/*.sock 2>/dev/null || true
     # The HUD's input-mode switch and diagnostics live on this control port.
     # The fallback desktop starts it separately, but direct Xorg must too.
     start_desktop_program control python3 "$BENCH/session_control.py"
@@ -195,7 +196,8 @@ stream_pid=$!
 echo "$stream_pid" > "$BENCH/direct-stream.pid"
 for attempt in $(seq 1 20); do
     if curl -fsS "http://127.0.0.1:${PORT}/api/health" >/dev/null 2>&1; then
-        chmod 666 "$SELKIES_JS_SOCKET_PATH"/*.sock 2>/dev/null || true
+        chgrp gamer "$SELKIES_JS_SOCKET_PATH"/*.sock 2>/dev/null || true
+        chmod 770 "$SELKIES_JS_SOCKET_PATH"/*.sock 2>/dev/null || true
         start_desktop
         echo "Direct NVIDIA stream ready on port $PORT"
         exit 0

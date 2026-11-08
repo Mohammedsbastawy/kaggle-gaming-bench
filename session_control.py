@@ -50,7 +50,8 @@ def get_gpu_metrics() -> List[Dict[str, Any]]:
 def write_active_game(pid: int, pgid: int, title: str, source: str) -> None:
     """Record a dashboard-launched process after validating its identity."""
     STATE.write_text(json.dumps({"pid": pid, "pgid": pgid, "title": title,
-                                 "source": source, "started": time.time()}), encoding="utf-8")
+                                 "source": source, "started": time.time(),
+                                 "input_mode": _get_input_mode()}), encoding="utf-8")
 
 
 def clear_active_game(pid: int = 0) -> None:
@@ -198,6 +199,20 @@ async def status(_request: web.Request) -> web.Response:
                      if not item["dashboard"] and _game_process(item["pid"])), None)
         if game:
             data.update({"running": True, "title": game["title"]})
+    current_mode = _get_input_mode()
+    data["current_input_mode"] = current_mode
+    if data["running"]:
+        recorded = data.get("input_mode")
+        if recorded:
+            data["input_mode_needs_restart"] = recorded != current_mode
+        else:
+            try:
+                changed = json.loads(INPUT_MODE_FILE.read_text(encoding="utf-8")).get("updated", 0)
+                data["input_mode_needs_restart"] = changed > float(data.get("started", changed))
+            except (OSError, ValueError, TypeError):
+                data["input_mode_needs_restart"] = False
+    else:
+        data["input_mode_needs_restart"] = False
     return web.json_response(data)
 
 

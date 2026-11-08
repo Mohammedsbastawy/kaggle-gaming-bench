@@ -35,8 +35,22 @@ ensure_control() {
     exit 1
 }
 
+share_gamepad_sockets() {
+    local socket attempt
+    for attempt in $(seq 1 20); do
+        [ -S /tmp/selkies_js0.sock ] && break
+        sleep 0.25
+    done
+    for socket in /tmp/selkies_js*.sock /tmp/selkies_event*.sock; do
+        [ -S "$socket" ] || continue
+        chgrp gamer "$socket"
+        chmod 770 "$socket"
+    done
+}
+
 if curl -fsS "http://127.0.0.1:${PORT}/api/health" >/dev/null 2>&1; then
     ensure_control
+    share_gamepad_sockets
     echo "Stream and control ready on port $PORT"
     exit 0
 fi
@@ -130,6 +144,7 @@ for attempt in $(seq 1 30); do
 done
 curl -fsS "http://127.0.0.1:${PORT}/api/health" >/dev/null
 ensure_control
+share_gamepad_sockets
 
 # A live session may already have its game desktop and dashboard on :2.
 if [ "${GAME_STREAM_ONLY:-0}" = 1 ]; then
