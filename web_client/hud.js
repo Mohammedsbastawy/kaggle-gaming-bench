@@ -55,7 +55,7 @@
           </div>
           <div class="seven-actions">
             <button class="seven-button" data-action="fullscreen">Fullscreen</button>
-            <button class="seven-button" data-action="pointer">Lock Mouse</button>
+            <button class="seven-button" data-action="pointer">Lock Mouse for Game</button>
             <button class="seven-button" data-action="mode" data-stat="modename">🖱️ Mode: M+K</button>
             <button class="seven-button" data-action="controller">🎮 Desktop Cursor</button>
             <button class="seven-button" data-action="keyboard">⌨ On-screen Keyboard</button>
@@ -350,14 +350,11 @@
       document.exitPointerLock();
       return;
     }
-    // Lock Selkies' own video target. Its input handler then sends relative
-    // motion without the fullscreen/keyboard-lock transition that can stall
-    // embedded browsers.
-    const target = ["videoStream", "videoCanvas", "videoWorkerCanvas", "stream"]
-      .map((id) => document.getElementById(id))
-      .find((element) => element?.getBoundingClientRect().width > 0);
+    // Selkies attaches its mouse listener to overlayInput. Locking the video
+    // instead makes _mouseButtonMovement discard movement with no button held.
+    const target = document.getElementById("overlayInput");
     if (!target || typeof target.requestPointerLock !== "function") {
-      toast("Mouse lock needs a full Edge or Chrome browser tab.");
+      toast("Game input is not ready. Try again when the stream appears.");
       return;
     }
     setTimeout(() => {
@@ -486,8 +483,8 @@
   document.addEventListener("pointerlockchange", () => {
     state.pointer = Boolean(document.pointerLockElement);
     button("pointer").classList.toggle("is-active", state.pointer);
-    button("pointer").textContent = state.pointer ? "Unlock Mouse (Esc)" : "Lock Mouse";
-    if (state.pointer) toast("Mouse locked. Press Esc to release it.");
+    button("pointer").textContent = state.pointer ? "Release Mouse (Esc)" : "Lock Mouse for Game";
+    if (state.pointer) toast("Mouse captured for the game. Press Esc to release it.");
   });
   document.addEventListener("pointerlockerror", () => toast("Mouse lock was blocked. Open this stream in Edge or Chrome."));
   window.addEventListener("message", (event) => {
