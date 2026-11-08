@@ -11,6 +11,7 @@
     expanded: false, qualityInitialized: false,
     rtts: [], audio: true, pointer: false, esc: false, toastTimer: 0,
     hasGamepad: false, inputMode: "mouse_keyboard", gameRunning: null,
+    gameKey: null, inputRestartRequired: false,
     hidden: false, controllerMode: "desktop", keyboardOpen: false,
     padButtons: [], cursorX: .5, cursorY: .5, lastMove: 0, lastScroll: 0,
     lastFocusNavigation: 0,
@@ -25,7 +26,7 @@
     <div class="seven-shell">
       <div class="seven-topbar">
         <div class="seven-brand"><i class="seven-mark"></i><span class="seven-brand-name">7BZ Dev Cloud Game</span><span class="seven-live">LIVE</span></div>
-        <nav class="seven-appbar" aria-label="Running programs"><button class="seven-button" data-action="home">7BZ Home</button><span data-apps></span><button class="seven-button seven-danger" data-action="reset-quick" hidden>Kill Game</button></nav>
+        <nav class="seven-appbar" aria-label="Running programs"><button class="seven-button" data-action="home">7BZ Home</button><span data-apps></span><span class="seven-restart-hint" data-restart-hint hidden>Restart game for controller</span><button class="seven-button seven-danger" data-action="reset-quick" hidden>Kill Game</button></nav>
         <div class="seven-quick">
           <div class="seven-chip"><b data-stat="fps">--</b><span>Stream FPS</span></div>
           <div class="seven-chip"><b data-stat="rtt">--</b><span>Stream RTT</span></div>
@@ -382,7 +383,9 @@
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
       const result = await response.json();
       state.inputMode = result.mode;
+      state.inputRestartRequired = Boolean(state.gameRunning);
       updateInputModeUI();
+      if (state.gameRunning) setControllerMode("desktop");
       toast(result.mode === "mouse_keyboard"
         ? "Mouse & Keyboard selected. Restart the game to remove virtual controllers."
         : "Gamepad selected. Restart the game to expose Xbox controllers.");
@@ -395,13 +398,15 @@
 
   function updateInputModeUI() {
     const isKbm = state.inputMode === "mouse_keyboard";
-    const label = isKbm ? "🖱️ Mode: M+K" : "🎮 Mode: Gamepad";
+    const label = (isKbm ? "🖱️ Mode: M+K" : "🎮 Mode: Gamepad") +
+      (state.inputRestartRequired ? " · restart game" : "");
     stat("modename", label);
     const btn = button("mode");
     if (btn) {
       btn.textContent = label;
       btn.classList.toggle("is-active", !isKbm);
     }
+    one("[data-restart-hint]").hidden = !state.inputRestartRequired;
   }
 
   async function syncInputMode() {
@@ -422,10 +427,14 @@
       if (!response.ok) return;
       const data = await response.json();
       const running = Boolean(data.running);
+      const gameKey = running ? String(data.pid || data.windows?.find((item) => !item.dashboard)?.id || "game") : null;
+      state.inputRestartRequired = Boolean(data.input_mode_needs_restart);
+      updateInputModeUI();
       updateAppbar(Array.isArray(data.windows) ? data.windows : []);
-      if (state.gameRunning === running) return;
+      if (state.gameRunning === running && state.gameKey === gameKey) return;
       state.gameRunning = running;
-      setControllerMode(running && state.inputMode === "gamepad" ? "game" : "desktop");
+      state.gameKey = gameKey;
+      setControllerMode(running && state.inputMode === "gamepad" && !state.inputRestartRequired ? "game" : "desktop");
     } catch (_) {}
   }
 
@@ -494,7 +503,7 @@
       // Reset the chosen ceiling once, after the dashboard restores its settings.
       state.qualityInitialized = true;
       setTimeout(() => post({ type: "settings", settings: {
-        rate_control_mode: "cbr", video_bitrate: 4500, framerate: 30,
+        rate_control_mode: "cbr", video_bitrate: 7000, framerate: 30,
       } }), 1500);
       return;
     }

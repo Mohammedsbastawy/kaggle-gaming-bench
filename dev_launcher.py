@@ -365,6 +365,25 @@ message = "Select a game to view details or launch"
 active_proc: Optional[subprocess.Popen] = None
 active_game_title = ""
 
+
+def running_game() -> Optional[Dict[str, Any]]:
+    """Recognize a game launched before this dashboard process started."""
+    if active_proc is not None and active_proc.poll() is None:
+        try:
+            return {"pid": active_proc.pid, "pgid": os.getpgid(active_proc.pid),
+                    "title": active_game_title}
+        except ProcessLookupError:
+            pass
+    try:
+        data = json.loads((BENCH / "active-game.json").read_text(encoding="utf-8"))
+        pid = int(data["pid"])
+        pgid = int(data["pgid"])
+        if pid > 1 and pgid > 1 and Path(f"/proc/{pid}").stat().st_uid == os.getuid():
+            return {"pid": pid, "pgid": pgid, "title": data.get("title", "Game")}
+    except (OSError, ValueError, KeyError, TypeError):
+        pass
+    return None
+
 epic_login_modal = False
 epic_auth_code_input = ""
 epic_auth_editing = False
@@ -434,8 +453,9 @@ def get_selected_game() -> Optional[Dict[str, Any]]:
 
 def launch_game(item: Dict[str, Any]) -> str:
     global active_proc, active_game_title
-    if active_proc is not None and active_proc.poll() is None:
-        return f"{active_game_title} is already running."
+    existing = running_game()
+    if existing:
+        return f"{existing['title']} is already running."
 
     action = item.get("action")
     if action == "legendary" and not item.get("is_installed"):
@@ -506,12 +526,15 @@ def launch_game(item: Dict[str, Any]) -> str:
 
 def stop_active_game() -> str:
     global active_proc, active_game_title
-    if active_proc is None or active_proc.poll() is not None:
+    game = running_game()
+    if game is None:
         return "No game currently running."
     try:
-        os.killpg(os.getpgid(active_proc.pid), 15)
-        title = active_game_title
+        os.killpg(game["pgid"], 15)
+        title = game["title"]
         active_game_title = ""
+        from session_control import clear_active_game
+        clear_active_game(game["pid"])
         return f"Stopped {title}."
     except OSError as exc:
         return f"Error stopping: {exc}"
@@ -567,7 +590,7 @@ def draw_header():
 
     # 3. Active Process / Status Pod (Far Right)
     status_rect = pygame.Rect(WIDTH - 195, 14, 180, 40)
-    if active_proc is not None and active_proc.poll() is None:
+    if running_game():
         pygame.draw.rect(screen, (180, 25, 40), status_rect, border_radius=8)
         lbl_stop = font_btn.render("STOP GAME", True, TEXT_WHITE)
         screen.blit(lbl_stop, (status_rect.centerx - lbl_stop.get_width() // 2, status_rect.centery - lbl_stop.get_height() // 2))
@@ -1504,7 +1527,7 @@ def handle_click(pos: Tuple[int, int]):
         return
 
     # 1. Stop Game Button (Header top-right)
-    if active_proc is not None and active_proc.poll() is None:
+    if running_game():
         status_rect = pygame.Rect(WIDTH - 195, 14, 180, 40)
         if status_rect.collidepoint((mx, my)):
             message = stop_active_game()
@@ -1719,7 +1742,7 @@ def main():
         # Keep the dashboard responsive for Home, but do not spend a CPU core
         # drawing an obscured window while a game needs that core.
         pygame.event.pump()
-        if active_proc is not None and active_proc.poll() is None and not pygame.key.get_focused():
+        if running_game() and not pygame.key.get_focused():
             if any(event.type == pygame.QUIT for event in pygame.event.get()):
                 break
             clock.tick(6)
