@@ -58,7 +58,9 @@ TAB_EPIC = 0
 TAB_LOCAL = 1
 TAB_DOWNLOADS = 2
 TAB_BROWSER = 3
-TABS = ["Epic Games", "Local Games", "Downloads", "Browser"]
+TAB_LICHII = 4
+TABS = ["Epic Games", "Local Games", "Downloads", "Browser", "Lichii EMU"]
+LICHII_APP = Path("/opt/lichii/squashfs-root/AppRun")
 
 display = None
 screen = None
@@ -440,6 +442,10 @@ def launch_game(item: Dict[str, Any]) -> str:
                 command = ["python3", str(BENCH / "gpu_runtime.py"), "launch-file", path, wine_runner()]
             else:
                 command = [path]
+        elif action == "lichii":
+            if not LICHII_APP.is_file():
+                return "Lichii is unavailable. Re-run Kaggle setup to install build 117."
+            command = [str(LICHII_APP)]
         else:
             return "Unsupported launch action."
 
@@ -1030,6 +1036,16 @@ def draw_workspace():
         workspace_button(pygame.Rect(48, 270, 240, 48), "OPEN WEB BROWSER", True)
         workspace_button(pygame.Rect(310, 270, 240, 48), "VIEW DOWNLOADS TAB")
         screen.blit(font_small.render("Use Downloads tab for direct links & RAR extraction. Use Browser for ordinary web surfing.", True, TEXT_MUTED), (48, 341))
+    elif tab_index == TAB_LICHII:
+        screen.blit(font_hero_title.render("Lichii Emulator", True, TEXT_WHITE), (48, 142))
+        screen.blit(font_body.render("Nintendo Switch / Switch 2 emulator - build 117 (Linux PGO)", True, CYAN_NEON), (48, 184))
+        status = "INSTALLED" if LICHII_APP.is_file() else "NOT INSTALLED"
+        screen.blit(font_body.render(f"STATUS: {status}", True,
+                                     LIME_GREEN if LICHII_APP.is_file() else DANGER_RED), (48, 225))
+        workspace_button(pygame.Rect(48, 270, 245, 48), "OPEN LICHII", LICHII_APP.is_file())
+        screen.blit(font_body.render("Import your own legally obtained games and system files in Lichii.", True, TEXT_WHITE), (48, 353))
+        screen.blit(font_body.render("Game files, keys, and firmware are not included. Your settings live in the gamer home folder.", True, TEXT_MUTED), (48, 386))
+        screen.blit(font_small.render("Experimental software: graphics and compatibility depend on the Kaggle GPU session.", True, TEXT_MUTED), (48, 435))
     elif tab_index == TAB_DOWNLOADS:
         screen.blit(font_hero_title.render("Download Manager & Archive Tool", True, TEXT_WHITE), (48, 138))
         screen.blit(font_small.render("Download via direct HTTPS links, or manage and extract downloaded RAR/ZIP files.", True, TEXT_MUTED), (48, 168))
@@ -1218,6 +1234,10 @@ def handle_workspace_click(pos):
                 message = str(exc)
         elif 310 <= mx <= 550 and 270 <= my <= 318:
             tab_index = TAB_DOWNLOADS
+
+    elif tab_index == TAB_LICHII:
+        if 48 <= mx <= 293 and 270 <= my <= 318:
+            message = launch_game({"title": "Lichii", "action": "lichii", "store": "Lichii"})
 
     elif tab_index == TAB_DOWNLOADS:
         download_editing = 48 <= mx <= 968 and 192 <= my <= 228

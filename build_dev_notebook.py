@@ -22,9 +22,9 @@ else:
 
 revision = subprocess.check_output(['git', '-C', str(REPO), 'rev-parse', 'HEAD'], text=True).strip()
 marker = REPO / '.setup-complete'
-ready = (marker.is_file() and marker.read_text().strip() == f'{revision}:{PROFILE}:{PREREQS}'
-         and shutil.which('wine') and shutil.which('aria2c')
-         and importlib.util.find_spec('selkies') and importlib.util.find_spec('pygame'))
+lichii_build = Path('/opt/lichii/build')
+lichii_ready = lichii_build.is_file() and lichii_build.read_text().strip() == 'build-117'
+ready = bool(marker.is_file() and marker.read_text().strip() == f'{revision}:{PROFILE}:{PREREQS}' and shutil.which('wine') and shutil.which('aria2c') and importlib.util.find_spec('selkies') and importlib.util.find_spec('pygame') and lichii_ready)
 if ready:
     print('7BZ environment already prepared in this Kaggle session; skipping setup.', flush=True)
 else:

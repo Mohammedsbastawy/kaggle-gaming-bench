@@ -24,6 +24,7 @@ The local profile also skips boot-time Visual C++ installers, `winetricks vcrun2
 | File | Responsibility |
 | --- | --- |
 | `setup.sh` | Install desktop, Wine, graphics, streaming, browser, and optional storefront packages |
+| `install_lichii.sh` | Install pinned Lichii build 117 Linux PGO AppImage without FUSE |
 | `boot_kaggle.py` | Start direct NVIDIA Xorg stream, fall back to Selkies desktop, report health |
 | `start_direct_stream.sh`, `start_desktop.sh` | Desktop and stream process launch |
 | `dev_launcher.py`, `local_tools.py` | 7BZ UI, file browser, browser launch, HTTP/torrent downloads |
@@ -32,6 +33,8 @@ The local profile also skips boot-time Visual C++ installers, `winetricks vcrun2
 | `notebook_connect.py` | Kaggle proxy connection UI |
 
 Local builds should be complete folders containing the `.exe` and its assets/DLLs. The Local Games browser starts in `/tmp/game-builds`; downloads go to `/home/gamer/Downloads`. Select the `.exe` and choose **Run Selected .EXE**. The game process starts with its containing folder as the working directory. Torrent transfers depend on Kaggle's network allowing peer connections.
+
+The Lichii EMU tab launches `/opt/lichii/squashfs-root/AppRun` from the pinned build 117 AppImage installed in either setup profile. The upstream package needs glibc 2.39 or newer, as provided by Ubuntu 24.04. Lichii settings and saves live under the `gamer` home directory; game files, keys, and firmware are supplied by the user. A fresh Kaggle session downloads the package again. A failed download leaves the tab visible with an unavailable status.
 
 ## Validation and limits
 
