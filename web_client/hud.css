@@ -45,6 +45,7 @@
 .seven-appbar { display: flex; align-items: center; gap: 6px; min-width: 0; max-width: 46%; }
 .seven-appbar [data-apps] { display: flex; gap: 6px; min-width: 0; overflow-x: auto; scrollbar-width: thin; }
 .seven-app-button { overflow: hidden; max-width: 175px; text-overflow: ellipsis; }
+.seven-restart-hint { align-self: center; color: #ffd27c; font-size: 11px; font-weight: 700; white-space: nowrap; }
 .seven-appbar .seven-button { flex: none; padding: 7px 9px; }
 .seven-brand { display: flex; align-items: center; gap: 10px; min-width: 215px; font-weight: 760; letter-spacing: .02em; }
 .seven-mark { width: 24px; height: 24px; border-radius: 8px; background: linear-gradient(140deg, var(--seven-cyan), var(--seven-violet)); box-shadow: 0 0 22px rgba(72,215,255,.32); }
