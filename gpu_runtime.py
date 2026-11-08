@@ -398,6 +398,32 @@ def configure_mouse(wine_bin, env):
             pass
 
 
+def configure_dishonored_mouse(target_bin, gamer_home):
+    """Keep the working camera sensitivity when a fresh game install is launched."""
+    if target_bin.name.casefold() != "dishonored.exe":
+        return
+    configs = [Path(gamer_home) / "My Games/Dishonored/DishonoredGame/Config/DishonoredInput.ini"]
+    install = next((parent for parent in target_bin.parents
+                    if parent.name.casefold() == "dishonoredde"), None)
+    if install is not None:
+        configs.append(install / "DishonoredGame/Config/DishonoredInput.ini")
+    for config in configs:
+        try:
+            original = config.read_bytes()
+            updated, count = re.subn(rb"(?m)^MouseSensitivity=13\.0(?=\r?$)",
+                                     b"MouseSensitivity=6.5", original, count=1)
+            if count:
+                backup = config.with_name(config.name + ".7bz-original")
+                if not backup.exists():
+                    backup.write_bytes(original)
+                config.write_bytes(updated)
+                print(f"Dishonored mouse sensitivity set to 6.5 in {config}.", flush=True)
+        except FileNotFoundError:
+            continue
+        except OSError as exc:
+            print(f"Dishonored mouse profile could not be saved: {exc}", file=sys.stderr)
+
+
 def select_graphics_backend(facts, preference="auto", is_64bit=True):
     """Select only paths whose required presentation probe succeeded."""
     if preference not in ("auto", "dxvk", "wined3d"):
@@ -574,6 +600,7 @@ def launch(app, wine, local_path=None):
                    "--", "-dx11", "-d3d11"]
     elif target_bin and wine_bin:
         print(f"Target game binary detected: {target_bin}", flush=True)
+        configure_dishonored_mouse(target_bin, env["HOME"])
         try:
             configure_mouse(str(wine_bin), env)
         except Exception:

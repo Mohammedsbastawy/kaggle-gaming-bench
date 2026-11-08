@@ -64,6 +64,19 @@ else
 fi
 printf '%s' "$PULSE_SERVER" > "$BENCH/pulse-server-path"
 chmod 644 "$BENCH/pulse-server-path"
+# Wine-GE can choose ALSA even with a working PulseAudio server. Route its
+# default ALSA device to the sink captured by Selkies on fresh sessions.
+if [ ! -e /home/gamer/.asoundrc ]; then
+    cat > /home/gamer/.asoundrc <<'EOF'
+pcm.!default {
+    type pulse
+}
+ctl.!default {
+    type pulse
+}
+EOF
+    chown gamer:gamer /home/gamer/.asoundrc
+fi
 export DISPLAY=:1 XAUTHORITY="$BENCH/nvidia-Xauthority" PULSE_SERVER PULSE_COOKIE="$AUDIO_COOKIE"
 export PULSE_SINK=output
 ENCODER_DEVICE=0
