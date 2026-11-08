@@ -1,5 +1,6 @@
 """Legacy desktop quality tuner for 7BZ Dev Cloud Game."""
 import json
+import importlib.util
 import os
 from pathlib import Path
 import subprocess
@@ -145,29 +146,29 @@ def load_settings():
 
 
 def inject_keyboard_lock():
-    """Inject keyboard lock JS into every Selkies HTML file found on disk."""
+    """Inject keyboard lock JS into the installed Selkies web client."""
     marker = '7BZ Dev Cloud Game: Keyboard Lock'
     patched = []
-    search_roots = [Path('/usr/local/lib'), Path('/usr/lib')]
-    for root in search_roots:
-        if not root.is_dir():
+    spec = importlib.util.find_spec('selkies')
+    if not spec or not spec.submodule_search_locations:
+        return patched
+    for location in spec.submodule_search_locations:
+        html = Path(location) / 'selkies_web' / 'index.html'
+        if not html.is_file():
             continue
-        for html in root.rglob('index.html'):
-            if 'selkies' not in str(html).lower():
+        try:
+            text = html.read_text(encoding='utf-8')
+            if marker in text:
+                patched.append(f'{html} (already patched)')
                 continue
-            try:
-                text = html.read_text(encoding='utf-8')
-                if marker in text:
-                    patched.append(f'{html} (already patched)')
-                    continue
-                if '</head>' in text:
-                    html.write_text(text.replace('</head>', KEYBOARD_LOCK_JS + '\n</head>'), encoding='utf-8')
-                    patched.append(str(html))
-                elif '</body>' in text:
-                    html.write_text(text.replace('</body>', KEYBOARD_LOCK_JS + '\n</body>'), encoding='utf-8')
-                    patched.append(str(html))
-            except Exception as e:
-                patched.append(f'{html} (error: {e})')
+            if '</head>' in text:
+                html.write_text(text.replace('</head>', KEYBOARD_LOCK_JS + '\n</head>'), encoding='utf-8')
+                patched.append(str(html))
+            elif '</body>' in text:
+                html.write_text(text.replace('</body>', KEYBOARD_LOCK_JS + '\n</body>'), encoding='utf-8')
+                patched.append(str(html))
+        except Exception as e:
+            patched.append(f'{html} (error: {e})')
     return patched
 
 
