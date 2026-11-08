@@ -60,6 +60,8 @@ The **Browser** tab opens a native browser window on the streamed desktop. Brows
 
 The **Lichii EMU** tab opens the native Linux PGO build 117 of [Lichii](https://github.com/zortos293/Lichii/releases/tag/build-117). Kaggle setup downloads and extracts the pinned AppImage into `/opt/lichii`; the dashboard shows whether it is installed and can stop its process. Add your own legally obtained game files and required system files through Lichii's interface. No games, keys, or firmware are bundled. Lichii is experimental, and the Kaggle GPU/container must be tested with a specific title before claiming compatibility or performance.
 
+For faster fresh sessions, the notebook can restore a private prepared-runtime output from a separate Kaggle builder notebook. It checks the Kaggle base package set and NVIDIA driver before using the snapshot, and falls back to the normal install on a mismatch. See `PROJECT_GUIDE.md` for the cache workflow and limits.
+
 * **Epic Games Dual Frontends**: 
   * **Heroic Games Launcher**: Full graphical Electron UI for library browsing and OAuth authentication. DXVK is enabled only when its NVIDIA Vulkan path passes the runtime probe.
   * **Legendary CLI**: Fast, terminal-based launcher using the measured NVIDIA renderer when available. CPU WineD3D is available by explicit opt-in for lightweight titles.
