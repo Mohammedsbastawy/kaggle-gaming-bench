@@ -68,8 +68,22 @@ class RuntimeTests(unittest.TestCase):
         values = [entry.args[0][5] for entry in run.call_args_list]
         self.assertEqual(values, ["MouseWarpOverride", "GrabPointer", "UseTakeFocus",
                                   "MouseSpeed", "MouseThreshold1", "MouseThreshold2", "MouseSensitivity"])
-        configured = [entry.args[0][9] for entry in run.call_args_list]
-        self.assertEqual(configured, ["force", "Y", "N", "0", "0", "0", "10"])
+        self.assertEqual(run.call_args_list[0].args[0][2], "delete")
+        configured = [entry.args[0][9] for entry in run.call_args_list[1:]]
+        self.assertEqual(configured, ["Y", "N", "0", "0", "0", "10"])
+
+    def test_ghostrunner_profile_preserves_unrelated_settings_and_backup(self):
+        with tempfile.TemporaryDirectory() as directory:
+            config = Path(directory) / "drive_c/users/gamer/AppData/Local/Ghostrunner/Saved/Config/WindowsNoEditor/GameUserSettings.ini"
+            config.parent.mkdir(parents=True)
+            original = b"[ScalabilityGroups]\nsg.ResolutionQuality=100\nResolutionScale=100\nFrameRateLimit=0\nCustomSetting=keep\n"
+            config.write_bytes(original)
+            gpu_runtime.configure_ghostrunner(Path("Ghostrunner-Win64-Shipping.exe"), directory)
+            changed = config.read_bytes()
+            self.assertIn(b"ResolutionScale=67", changed)
+            self.assertIn(b"FrameRateLimit=30.000000", changed)
+            self.assertIn(b"CustomSetting=keep", changed)
+            self.assertEqual(config.with_name(config.name + ".7bz-original").read_bytes(), original)
 
     def test_backend_requires_vulkan_window_before_dxvk(self):
         facts = dict(vulkan_window=False, vulkan_32bit_loader=True,

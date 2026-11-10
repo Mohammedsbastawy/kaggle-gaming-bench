@@ -45,3 +45,11 @@ Run `python -m unittest test_local_tools.py`, `python -m py_compile boot_kaggle.
 Before the startup refactor, the notebook and full local Git checkout (including `.git` and uncommitted files) were saved in `D:\Kaggle Cloud Gaming Backups\2026-10-28-pre-startup`. The notebook copy is `kaggle_game_dev_bench.ipynb`; the repository snapshot is `repository-full.tar.gz`. The notebook copy's SHA-256 is `F4143D7425519FAC6EF439381FF48ECFE10EA3C25C2B837C17BFF8F85D7F96DC`.
 
 For Kaggle rollback, restore the previous notebook version from Kaggle version history or upload the backed-up notebook. For local rollback, extract the full archive to a new directory and inspect it before replacing the current checkout. The archive contains both committed history and the then-current working tree. Never reset or clean the current checkout merely to roll back; it may contain newer work.
+
+## Saved live-session fixes — 2026-11-10
+
+The notebook continues to load the latest `main` revision from Git. Updating this repository does not restart an active Kaggle session.
+
+Fresh boots prefer direct NVIDIA Xorg, with VirtualGL/Xvfb retained as a fallback. Streaming remains 1080p/30 FPS with a two-frame backpressure queue and a 6 Mbps initial bitrate (1.5–10 Mbps range). Ghostrunner uses 67% render scale and a 30 FPS limit, preserving original configuration backups. Vulkan presentation must still pass its probe before DXVK is selected; black surfaces on WineD3D remain unresolved.
+
+The Wine launcher preserves the stream's controller socket directory and sets up input interposers before starting Wine configuration commands. The HUD resynchronizes late-connected gamepads and acquires relative mouse capture on a game-surface click. Physical reconnect and mouse behavior still require user validation. Game saves and installed games in the temporary container are not made persistent by these source changes.

@@ -432,7 +432,7 @@ def configure_ghostrunner(target_bin, wineprefix):
     settings = (Path(wineprefix) / "drive_c/users/gamer/AppData/Local/Ghostrunner/Saved")
     config = settings / "Config/WindowsNoEditor/GameUserSettings.ini"
     values = {
-        b"sg.ResolutionQuality": b"75.000000",
+        b"sg.ResolutionQuality": b"66.670000",
         b"sg.ViewDistanceQuality": b"1",
         b"sg.AntiAliasingQuality": b"1",
         b"sg.ShadowQuality": b"1",
@@ -441,8 +441,8 @@ def configure_ghostrunner(target_bin, wineprefix):
         b"sg.EffectsQuality": b"1",
         b"sg.FoliageQuality": b"1",
         b"sg.ShadingQuality": b"1",
-        b"ResolutionScale": b"75",
-        b"FrameRateLimit": b"60.000000",
+        b"ResolutionScale": b"67",
+        b"FrameRateLimit": b"30.000000",
     }
     try:
         original = config.read_bytes()
@@ -463,7 +463,7 @@ def configure_ghostrunner(target_bin, wineprefix):
     # Ghostrunner also stores its menu settings as Unreal integer properties.
     # Change only recognized fields and preserve the original save as a backup.
     save = settings / "SaveGames/GhostrunnerSettingsGraphics.sav"
-    adjustments = {"ResolutionScale": 75, "PostProcessQuality": 1,
+    adjustments = {"ResolutionScale": 67, "PostProcessQuality": 1,
                    "ShadowQuality": 1, "TexturesQuality": 2,
                    "EffectsQuality": 1, "Brightness": 70}
     try:
@@ -544,8 +544,8 @@ def launch(app, wine, local_path=None):
     # upscaler can advertise a smaller virtual game surface and misalign input.
     env.pop("WINE_FULLSCREEN_FSR", None)
     env.pop("WINE_FULLSCREEN_FSR_STRENGTH", None)
-    env["VKD3D_CONFIG"] = "dxr11,dxr"
-    env["VKD3D_FEATURE_LEVEL"] = "12_1"
+    env.pop("VKD3D_CONFIG", None)
+    env.pop("VKD3D_FEATURE_LEVEL", None)
 
     # Guarantee full OpenGL 4.5 Compatibility Profile & WGL extensions for Wine/idTech
     if not direct_xorg:
@@ -581,7 +581,6 @@ def launch(app, wine, local_path=None):
                 pass
 
     wine_bin = wine or shutil.which("wine")
-    configure_mouse(wine_bin, env)
 
     # Expose the virtual controller only in gamepad mode. In mouse mode Wine
     # otherwise sees an Xbox controller even though the HUD says M+K.
@@ -593,8 +592,7 @@ def launch(app, wine, local_path=None):
         env["SDL_JOYSTICK_DEVICE"] = ""
         env["WINEDLLOVERRIDES"] += ";winebus.sys=d"
     else:
-        env["SELKIES_JS_SOCKET_PATH"] = ("/tmp/kaggle-game-dev-bench/direct-stream-sockets"
-                                         if direct_xorg else "/tmp")
+        env["SELKIES_JS_SOCKET_PATH"] = os.environ.get("SELKIES_JS_SOCKET_PATH") or ("/tmp/kaggle-game-dev-bench/direct-stream-sockets" if direct_xorg else "/tmp")
         env["SDL_JOYSTICK_DEVICE"] = "/dev/input/event1000:/dev/input/event1001:/dev/input/event1002:/dev/input/event1003"
         # Fix /dev/input permissions so gamer user can access virtual gamepad devices
         import subprocess as _sp

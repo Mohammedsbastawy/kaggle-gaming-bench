@@ -102,7 +102,7 @@ else:
     env["CUDA_VISIBLE_DEVICES"] = "0"
     env["SELKIES_ENCODER_DEVICE"] = "0"
 
-queue_size = os.environ.get("GAMELAB_WS_QUEUE", "4")
+queue_size = os.environ.get("GAMELAB_WS_QUEUE", "2")
 env.update(
     SELKIES_ENABLE_HTTPS="false",
     SELKIES_MODE="websockets",
@@ -110,7 +110,7 @@ env.update(
     SELKIES_ENCODER="h264enc",
     SELKIES_FRAMERATE="30-30",
     SELKIES_BACKPRESSURE_QUEUE_SIZE=queue_size,
-    SELKIES_VIDEO_BITRATE="3500,800-6000",
+    SELKIES_VIDEO_BITRATE="6000,1500-10000",
     SELKIES_RATE_CONTROL_MODE="cbr",
     SELKIES_CONGESTION_CONTROL="true",
     SELKIES_MANUAL_RESOLUTION="true",
@@ -124,24 +124,8 @@ env.update(
     DIRECT_STREAM_PORT="8080"
 )
 
-# 4. Prefer Mesa GLX capture with NVIDIA VirtualGL rendering. Kaggle's
-# headless NVIDIA Xorg can crash, while the ordinary Selkies Xvfb disables GLX.
-game_script = BENCH / "start_gpu_game_stream.sh"
+# Prefer the direct NVIDIA display verified in the live session.
 started = False
-if game_script.is_file():
-    try:
-        print("▶ Launching GPU game stream on port 8080...", flush=True)
-        res = subprocess.run(["bash", str(game_script)], env=env,
-                             capture_output=True, text=True, timeout=45)
-        if res.returncode == 0:
-            print(f"✓ {res.stdout.strip()}", flush=True)
-            started = True
-        else:
-            print(f"GPU game stream notice: {res.stdout[-300:]} {res.stderr[-300:]}", flush=True)
-    except Exception as exc:
-        print(f"GPU game stream exception: {exc}", flush=True)
-
-# 5. Try direct NVIDIA Xorg where the host supports a stable display.
 direct_script = BENCH / "start_direct_stream.sh"
 if not started and direct_script.is_file():
     try:
@@ -160,6 +144,21 @@ if not started and direct_script.is_file():
             print(f"Direct stream notice: {res.stdout[-300:]} {res.stderr[-300:]}", flush=True)
     except Exception as e:
         print(f"Direct stream launch exception: {e}", flush=True)
+
+# Fall back to VirtualGL/Xvfb if direct Xorg is unavailable.
+game_script = BENCH / "start_gpu_game_stream.sh"
+if not started and game_script.is_file():
+    try:
+        print("▶ Launching GPU game stream on port 8080...", flush=True)
+        res = subprocess.run(["bash", str(game_script)], env=env,
+                             capture_output=True, text=True, timeout=45)
+        if res.returncode == 0:
+            print(f"✓ {res.stdout.strip()}", flush=True)
+            started = True
+        else:
+            print(f"GPU game stream notice: {res.stdout[-300:]} {res.stderr[-300:]}", flush=True)
+    except Exception as exc:
+        print(f"GPU game stream exception: {exc}", flush=True)
 
 # 6. Fallback to standard Selkies desktop session if GPU paths did not start.
 if not started:

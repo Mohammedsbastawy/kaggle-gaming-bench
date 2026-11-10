@@ -93,7 +93,8 @@ EOF
 
 AUTH="$BENCH/nvidia-Xauthority"
 touch "$AUTH"
-chmod 600 "$AUTH"
+chgrp gamer "$AUTH"
+chmod 640 "$AUTH"
 xauth -f "$AUTH" add :1 . "$(od -An -N16 -tx1 /dev/urandom | tr -d ' \n')"
 nohup /usr/lib/xorg/Xorg :1 -config "$BENCH/nvidia-headless.conf" -auth "$AUTH" -nolisten tcp -noreset >> "$LOG" 2>&1 < /dev/null &
 PID=$!

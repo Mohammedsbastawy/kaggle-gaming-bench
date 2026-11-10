@@ -184,7 +184,7 @@ fi
 # This process runs as root because Xorg rejected the gamer's MIT-SHM attach.
 # Disable command execution and transfers on this privileged stream.
 # Fix permissions for gamepad devices and sockets
-chmod 777 /dev/input 2>/dev/null || true
+chmod 755 /dev/input 2>/dev/null || true
 chmod 666 /dev/input/event* /dev/input/js* 2>/dev/null || true
 mkdir -p "/direct-stream-sockets" && chmod 777 "/direct-stream-sockets" 2>/dev/null || true
 
@@ -196,9 +196,9 @@ nohup env DISPLAY=:1 XAUTHORITY="$BENCH/nvidia-Xauthority" \
     SELKIES_JS_SOCKET_PATH="$SELKIES_JS_SOCKET_PATH" \
     python3 -m selkies --port="$PORT" --enable-basic-auth=false \
     --mode=websockets --allowed-origins="$ORIGIN" \
-    --framerate=30-30 --video-bitrate=3500,800-6000 \
+    --framerate=30-30 --video-bitrate=6000,1500-10000 \
     --rate-control-mode=cbr --congestion-control=true \
-    --backpressure-queue-size=4 \
+    --backpressure-queue-size=2 \
     --command-enabled=false --file-transfers=none --printing-enabled=false \
     --web-root="$BENCH/web-root" --ui-title='7BZ Dev Cloud Game' \
     --ui-show-sidebar=true --ui-show-logo=false \

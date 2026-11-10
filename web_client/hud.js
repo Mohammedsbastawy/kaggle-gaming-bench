@@ -174,6 +174,7 @@
   }
   function setControllerMode(mode) {
     state.controllerMode = mode;
+    queueGamepadRecovery();
     if (mode === "game") showKeyboard(false);
     post({ type: "gamepadControl", enabled: mode === "game" });
     button("controller").textContent = mode === "desktop" ? "🎮 Desktop Cursor" : "🎮 Game Input";
@@ -430,6 +431,7 @@
       const gameKey = running ? String(data.pid || data.windows?.find((item) => !item.dashboard)?.id || "game") : null;
       state.inputRestartRequired = Boolean(data.input_mode_needs_restart);
       updateInputModeUI();
+      state.gameFocused = Boolean(data.windows?.some(item => !item.dashboard && item.active));
       updateAppbar(Array.isArray(data.windows) ? data.windows : []);
       if (state.gameRunning === running && state.gameKey === gameKey) return;
       state.gameRunning = running;
@@ -535,12 +537,47 @@
     state.hasGamepad = true;
     toast(`🎮 Gamepad Connected: ${event.gamepad.id.slice(0, 30)}`);
     checkGamepads();
+    state.padButtons = [];
+    queueGamepadRecovery();
   });
   window.addEventListener("gamepaddisconnected", () => {
     state.hasGamepad = false;
     toast("Gamepad disconnected");
     checkGamepads();
   });
+
+
+  // Live input repair: re-adopt a late-connected pad, even when the toggle
+  // was already enabled before the GamepadManager existed.
+  let padRecoveryTimer;
+  function recoverGamepadInput() {
+    const input = window.webrtcInput;
+    if (!input) return;
+    const enabled = state.controllerMode === "game" && !state.inputRestartRequired;
+    if (enabled) {
+      input.resyncGamepads?.();
+      input.gamepadManager?.enable();
+    } else {
+      input.gamepadManager?.disable();
+    }
+  }
+  function queueGamepadRecovery() {
+    clearTimeout(padRecoveryTimer);
+    padRecoveryTimer = setTimeout(recoverGamepadInput, 200);
+  }
+  window.addEventListener("focus", queueGamepadRecovery);
+  document.addEventListener("visibilitychange", () => {
+    if (!document.hidden) queueGamepadRecovery();
+  });
+  // Acquire relative mouse input from a trusted game-surface click. Consume
+  // only the initial unlocked click, so it cannot warp the game's camera.
+  window.addEventListener("mousedown", (event) => {
+    if (event.button !== 0 || !state.gameFocused || document.pointerLockElement) return;
+    if (event.target?.id !== "overlayInput") return;
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    togglePointer();
+  }, true);
 
   post({ type: "statsOpen", open: true });
   syncInputMode();
