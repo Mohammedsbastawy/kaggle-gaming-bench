@@ -41,7 +41,7 @@
   -webkit-backdrop-filter: blur(22px) saturate(150%);
 }
 
-.seven-topbar { display: flex; align-items: center; min-height: 48px; padding: 8px 12px 8px 16px; gap: 14px; }
+.seven-topbar { display: flex; flex-wrap: wrap; align-items: center; min-height: 48px; padding: 8px 12px 8px 16px; gap: 14px; }
 .seven-appbar { display: flex; align-items: center; gap: 6px; min-width: 0; max-width: 46%; }
 .seven-appbar [data-apps] { display: flex; gap: 6px; min-width: 0; overflow-x: auto; scrollbar-width: thin; }
 .seven-app-button { overflow: hidden; max-width: 175px; text-overflow: ellipsis; }
@@ -51,7 +51,7 @@
 .seven-mark { width: 24px; height: 24px; border-radius: 8px; background: linear-gradient(140deg, var(--seven-cyan), var(--seven-violet)); box-shadow: 0 0 22px rgba(72,215,255,.32); }
 .seven-live { display: inline-flex; align-items: center; gap: 6px; color: var(--seven-good); font-size: 11px; font-weight: 700; letter-spacing: .12em; }
 .seven-live::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: currentColor; box-shadow: 0 0 12px currentColor; }
-.seven-quick { display: flex; flex: 1; min-width: 0; align-items: center; justify-content: center; gap: 7px; overflow: hidden; }
+.seven-quick { display: flex; order: 2; flex: 1 0 100%; min-width: 0; align-items: center; justify-content: center; gap: 7px; overflow: hidden; }
 .seven-chip { min-width: 86px; padding: 6px 9px; border-radius: 10px; background: rgba(255,255,255,.055); border: 1px solid rgba(255,255,255,.055); text-align: center; }
 .seven-chip b { display: block; font-size: 13px; line-height: 14px; font-weight: 720; }
 .seven-chip span { color: var(--seven-muted); font-size: 9px; text-transform: uppercase; letter-spacing: .1em; }
@@ -63,9 +63,9 @@
 .seven-button.seven-danger:hover { background: rgba(255,82,107,.3); border-color: var(--seven-danger); }
 .seven-icon-button { width: 34px; height: 34px; padding: 0; font-size: 17px; }
 
-.seven-details { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; max-height: 340px; padding: 0 12px 12px; transition: max-height .22s ease, padding .22s ease, opacity .18s ease; }
-.seven-details.is-collapsed { max-height: 0; padding-top: 0; padding-bottom: 0; opacity: 0; pointer-events: none; }
-.seven-card { border: 1px solid rgba(255,255,255,.07); border-radius: 14px; background: var(--seven-panel); padding: 12px; }
+.seven-details { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 10px; max-height: min(70vh, calc(100vh - 140px)); overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; padding: 0 12px 12px; transition: max-height .22s ease, padding .22s ease, opacity .18s ease; }
+.seven-details.is-collapsed { max-height: 0; overflow: hidden; padding-top: 0; padding-bottom: 0; opacity: 0; pointer-events: none; }
+.seven-card { min-width: 0; border: 1px solid rgba(255,255,255,.07); border-radius: 14px; background: var(--seven-panel); padding: 12px; }
 .seven-card-title { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; color: var(--seven-muted); font-size: 10px; font-weight: 740; letter-spacing: .12em; text-transform: uppercase; }
 .seven-metrics { display: grid; grid-template-columns: repeat(4, 1fr); gap: 7px; }
 .seven-metric { padding: 9px; border-radius: 11px; background: rgba(255,255,255,.04); }
