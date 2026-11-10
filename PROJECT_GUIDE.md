@@ -53,3 +53,9 @@ The notebook continues to load the latest `main` revision from Git. Updating thi
 Fresh boots prefer direct NVIDIA Xorg, with VirtualGL/Xvfb retained as a fallback. Streaming remains 1080p/30 FPS with a two-frame backpressure queue and a 6 Mbps initial bitrate (1.5–10 Mbps range). Ghostrunner uses 67% render scale and a 30 FPS limit, preserving original configuration backups. Vulkan presentation must still pass its probe before DXVK is selected; black surfaces on WineD3D remain unresolved.
 
 The Wine launcher preserves the stream's controller socket directory and sets up input interposers before starting Wine configuration commands. The HUD resynchronizes late-connected gamepads and acquires relative mouse capture on a game-surface click. Physical reconnect and mouse behavior still require user validation. Game saves and installed games in the temporary container are not made persistent by these source changes.
+
+## Direct WebRTC profile — 2026-11-10
+
+Fresh direct-Xorg boots now use 1080p/60 FPS WebRTC with NVENC, an 8 Mbps initial bitrate (6–12 Mbps range), congestion control, and 5 ms audio frames. `rtc_config.json` uses STUN only, avoiding the default public TURN relay. Live testing reported 190–210 ms RTT at 1080p, compared with over 250 ms on the earlier WebSocket session. These are observations for one connection, not a latency guarantee or measured input-to-display latency. The remaining delay is substantial.
+
+STUN-only WebRTC may fail on restrictive networks. Set `GAMELAB_TRANSPORT=websockets` before boot for the previous transport, or provide `SELKIES_RTC_CONFIG_JSON` containing suitable ICE servers. Keep TURN credentials outside Git. Transport switching remains enabled. The WebSocket fallback queue is one frame. The source change does not migrate or restart an active session.

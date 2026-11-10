@@ -83,6 +83,7 @@ ENCODER_DEVICE=0
 if [ -e /dev/nvidia1 ]; then ENCODER_DEVICE=1; fi
 export CUDA_VISIBLE_DEVICES="$ENCODER_DEVICE"
 export SELKIES_ALLOWED_ORIGINS="$ORIGIN"
+export SELKIES_RTC_CONFIG_JSON="${SELKIES_RTC_CONFIG_JSON:-$BENCH/rtc_config.json}"
 export SELKIES_JS_SOCKET_PATH="$BENCH/direct-stream-sockets"
 mkdir -p "$SELKIES_JS_SOCKET_PATH" "$BENCH/logs"
 chmod 777 "$BENCH/logs" 2>/dev/null || true
@@ -195,10 +196,10 @@ nohup env DISPLAY=:1 XAUTHORITY="$BENCH/nvidia-Xauthority" \
     SELKIES_AUDIO_DEVICE_NAME=output.monitor \
     SELKIES_JS_SOCKET_PATH="$SELKIES_JS_SOCKET_PATH" \
     python3 -m selkies --port="$PORT" --enable-basic-auth=false \
-    --mode=websockets --allowed-origins="$ORIGIN" \
-    --framerate=30-30 --video-bitrate=6000,1500-10000 \
+    --mode="${GAMELAB_TRANSPORT:-webrtc}" --enable-dual-mode=true --allowed-origins="$ORIGIN" \
+    --framerate="${SELKIES_FRAMERATE:-60-60}" --video-bitrate="${SELKIES_VIDEO_BITRATE:-8000,6000-12000}" \
     --rate-control-mode=cbr --congestion-control=true \
-    --backpressure-queue-size=2 \
+    --backpressure-queue-size="${SELKIES_BACKPRESSURE_QUEUE_SIZE:-1}" --audio-frame-duration-ms=5 \
     --command-enabled=false --file-transfers=none --printing-enabled=false \
     --web-root="$BENCH/web-root" --ui-title='7BZ Dev Cloud Game' \
     --ui-show-sidebar=true --ui-show-logo=false \
