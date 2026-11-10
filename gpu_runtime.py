@@ -668,6 +668,15 @@ def launch(app, wine, local_path=None):
                    "--", "-dx11", "-d3d11"]
     elif target_bin and wine_bin:
         print(f"Target game binary detected: {target_bin}", flush=True)
+        if target_bin == Path("/opt/fritchii/app/lichii.exe"):
+            runtime_dll = Path(env["WINEPREFIX"]) / "drive_c/windows/system32/msvcp140_codecvt_ids.dll"
+            if not runtime_dll.is_file():
+                installer = target_bin.parent / "vc_redist.x64.exe"
+                rc, output = run([wine_bin, str(installer), "/install", "/quiet", "/norestart"], env, timeout=120)
+                if not runtime_dll.is_file():
+                    print(f"Fritchii Visual C++ runtime installation failed ({rc}): {output[-500:]}", file=sys.stderr)
+                    return 78
+
         configure_dishonored_mouse(target_bin, env["HOME"])
         configure_ghostrunner(target_bin, env["WINEPREFIX"])
         if target_bin.name.casefold() == "ghostrunner-win64-shipping.exe":

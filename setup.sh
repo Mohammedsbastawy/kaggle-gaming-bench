@@ -211,8 +211,8 @@ fi
 id -u gamer >/dev/null 2>&1 || useradd -m -s /bin/bash -G audio,video gamer
 
 # Native Linux emulator, available in both setup profiles.
-if ! bash "$BENCH/install_lichii.sh"; then
-    echo "Warning: Lichii build 117 installation failed; 7BZ will show it as unavailable." >&2
+if ! bash "$BENCH/install_fritchii.sh"; then
+    echo "Warning: Fritchii v5.6 installation failed; 7BZ will show it as unavailable." >&2
 fi
 for sub in .config .local .steam game-builds logs ea-prefix; do
     mkdir -p "/home/gamer/$sub"

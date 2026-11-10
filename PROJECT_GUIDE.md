@@ -24,7 +24,7 @@ The local profile also skips boot-time Visual C++ installers, `winetricks vcrun2
 | File | Responsibility |
 | --- | --- |
 | `setup.sh` | Install desktop, Wine, graphics, streaming, browser, and optional storefront packages |
-| `install_lichii.sh` | Install pinned Lichii build 117 Linux PGO AppImage without FUSE |
+| `install_fritchii.sh` | Install checksum-verified Fritchii v5.6 Windows x64 package |
 | `boot_kaggle.py` | Start direct NVIDIA Xorg stream, fall back to Selkies desktop, report health |
 | `start_direct_stream.sh`, `start_desktop.sh` | Desktop and stream process launch |
 | `dev_launcher.py`, `local_tools.py` | 7BZ UI, file browser, browser launch, HTTP/torrent downloads |
@@ -34,7 +34,7 @@ The local profile also skips boot-time Visual C++ installers, `winetricks vcrun2
 
 Local builds should be complete folders containing the `.exe` and its assets/DLLs. The Local Games browser starts in `/tmp/game-builds`; downloads go to `/home/gamer/Downloads`. Select the `.exe` and choose **Run Selected .EXE**. The game process starts with its containing folder as the working directory. Torrent transfers depend on Kaggle's network allowing peer connections.
 
-The Lichii EMU tab launches `/opt/lichii/squashfs-root/AppRun` from the pinned build 117 AppImage installed in either setup profile. The upstream package needs glibc 2.39 or newer, as provided by Ubuntu 24.04. Lichii settings and saves live under the `gamer` home directory; game files, keys, and firmware are supplied by the user. A fresh Kaggle session downloads the package again. A failed download leaves the tab visible with an unavailable status.
+The Fritchii EMU tab launches `/opt/fritchii/app/lichii.exe` through `gpu_runtime.py launch-file` and Wine. Setup installs the pinned v5.6 Windows x64 ZIP after verifying its SHA-256. The upstream release has no Linux binary. Game files, keys, and firmware are supplied by the user. Settings live in the gamer Wine prefix; installation does not prove Vulkan or game compatibility. A failed download leaves the tab unavailable.
 
 ## Validation and limits
 

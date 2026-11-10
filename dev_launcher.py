@@ -58,16 +58,16 @@ TAB_EPIC = 0
 TAB_LOCAL = 1
 TAB_DOWNLOADS = 2
 TAB_BROWSER = 3
-TAB_LICHII = 4
-TABS = ["Epic Games", "Local Games", "Downloads", "Browser", "Lichii EMU"]
-LICHII_APP = Path("/opt/lichii/squashfs-root/AppRun")
+TAB_FRITCHII = 4
+TABS = ["Epic Games", "Local Games", "Downloads", "Browser", "Fritchii EMU"]
+FRITCHII_APP = Path("/opt/fritchii/app/lichii.exe")
 controller_focus = "tab:0"
 
 
-def lichii_available() -> bool:
+def fritchii_available() -> bool:
     """Check launch access without raising inside the dashboard draw loop."""
     try:
-        return os.access(LICHII_APP, os.X_OK) and LICHII_APP.is_file()
+        return os.access(FRITCHII_APP, os.R_OK) and FRITCHII_APP.is_file()
     except OSError:
         return False
 
@@ -477,10 +477,10 @@ def launch_game(item: Dict[str, Any]) -> str:
                 command = ["python3", str(BENCH / "gpu_runtime.py"), "launch-file", path, wine_runner()]
             else:
                 command = [path]
-        elif action == "lichii":
-            if not lichii_available():
-                return "Lichii is unavailable. Re-run Kaggle setup to install build 117."
-            command = [str(LICHII_APP)]
+        elif action == "fritchii":
+            if not fritchii_available():
+                return "Fritchii is unavailable. Re-run Kaggle setup to install v5.6."
+            command = ["python3", str(BENCH / "gpu_runtime.py"), "launch-file", str(FRITCHII_APP), wine_runner()]
         else:
             return "Unsupported launch action."
 
@@ -689,8 +689,8 @@ def controller_targets() -> List[Tuple[str, "pygame.Rect"]]:
     elif tab_index == TAB_BROWSER:
         add("browser:open", 48, 270, 240, 48)
         add("browser:downloads", 310, 270, 240, 48)
-    elif tab_index == TAB_LICHII and lichii_available():
-        add("lichii:open", 48, 270, 245, 48)
+    elif tab_index == TAB_FRITCHII and fritchii_available():
+        add("fritchii:open", 48, 270, 245, 48)
     return targets
 
 
@@ -1206,15 +1206,15 @@ def draw_workspace():
         workspace_button(pygame.Rect(48, 270, 240, 48), "OPEN WEB BROWSER", True)
         workspace_button(pygame.Rect(310, 270, 240, 48), "VIEW DOWNLOADS TAB")
         screen.blit(font_small.render("Use Downloads tab for direct links & RAR extraction. Use Browser for ordinary web surfing.", True, TEXT_MUTED), (48, 341))
-    elif tab_index == TAB_LICHII:
-        screen.blit(font_hero_title.render("Lichii Emulator", True, TEXT_WHITE), (48, 142))
-        screen.blit(font_body.render("Nintendo Switch / Switch 2 emulator - build 117 (Linux PGO)", True, CYAN_NEON), (48, 184))
-        available = lichii_available()
-        status = "READY" if available else "UNAVAILABLE"
+    elif tab_index == TAB_FRITCHII:
+        screen.blit(font_hero_title.render("Fritchii Emulator", True, TEXT_WHITE), (48, 142))
+        screen.blit(font_body.render("Nintendo Switch / Switch 2 emulator - Fritchii v5.6 (Windows x64 through Wine)", True, CYAN_NEON), (48, 184))
+        available = fritchii_available()
+        status = "INSTALLED" if available else "UNAVAILABLE"
         screen.blit(font_body.render(f"STATUS: {status}", True,
                                      LIME_GREEN if available else DANGER_RED), (48, 225))
-        workspace_button(pygame.Rect(48, 270, 245, 48), "OPEN LICHII", available)
-        screen.blit(font_body.render("Import your own legally obtained games and system files in Lichii.", True, TEXT_WHITE), (48, 353))
+        workspace_button(pygame.Rect(48, 270, 245, 48), "OPEN FRITCHII", available)
+        screen.blit(font_body.render("Import your own legally obtained games and system files in Fritchii.", True, TEXT_WHITE), (48, 353))
         screen.blit(font_body.render("Game files, keys, and firmware are not included. Your settings live in the gamer home folder.", True, TEXT_MUTED), (48, 386))
         screen.blit(font_small.render("Experimental software: graphics and compatibility depend on the Kaggle GPU session.", True, TEXT_MUTED), (48, 435))
     elif tab_index == TAB_DOWNLOADS:
@@ -1406,9 +1406,9 @@ def handle_workspace_click(pos):
         elif 310 <= mx <= 550 and 270 <= my <= 318:
             tab_index = TAB_DOWNLOADS
 
-    elif tab_index == TAB_LICHII:
+    elif tab_index == TAB_FRITCHII:
         if 48 <= mx <= 293 and 270 <= my <= 318:
-            message = launch_game({"title": "Lichii", "action": "lichii", "store": "Lichii"})
+            message = launch_game({"title": "Fritchii", "action": "fritchii", "store": "Fritchii"})
 
     elif tab_index == TAB_DOWNLOADS:
         download_editing = 48 <= mx <= 968 and 192 <= my <= 228

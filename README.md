@@ -58,7 +58,7 @@ The default dashboard opens on **Local Games**. Browse `/tmp/game-builds`, `/hom
 
 The **Browser** tab opens a native browser window on the streamed desktop. Browser downloads go to `/home/gamer/Downloads`. The **Downloads** tab uses aria2 for direct HTTP(S) links, magnet links, and `.torrent` files. Select a `.torrent` in Local Games to start it. Transfers are resumable, with progress, speed, ETA, and stop controls. Game compatibility still depends on the build's Windows dependencies and the live Kaggle GPU/runtime; a successful process launch alone does not prove in-game performance.
 
-The **Lichii EMU** tab opens the native Linux PGO build 117 of [Lichii](https://github.com/zortos293/Lichii/releases/tag/build-117). Kaggle setup downloads and extracts the pinned AppImage into `/opt/lichii`; the dashboard shows whether it is installed and can stop its process. Add your own legally obtained game files and required system files through Lichii's interface. No games, keys, or firmware are bundled. Lichii is experimental, and the Kaggle GPU/container must be tested with a specific title before claiming compatibility or performance.
+The **Fritchii EMU** tab launches [Fritchii v5.6](https://github.com/Frizti/Fritchii/releases/tag/fritchii-v5.6) through the project's Wine runner. Setup verifies the pinned Windows x64 ZIP's SHA-256 and installs it into `/opt/fritchii/app`. The release does not provide a Linux binary. Settings remain in the gamer Wine prefix; games and required system files are supplied by the user. Installation and UI launch do not establish gameplay compatibility, especially where Vulkan presentation is unavailable.
 
 * **Epic Games Dual Frontends**: 
   * **Heroic Games Launcher**: Full graphical Electron UI for library browsing and OAuth authentication. DXVK is enabled only when its NVIDIA Vulkan path passes the runtime probe.
@@ -122,3 +122,5 @@ python3 /tmp/kaggle-game-dev-bench/bench_runtime.py --label blood-west-wined3d -
 ```
 
 Record actual **in-game FPS**, frame-time spikes, and browser HUD input latency alongside the JSON report. The sampler records cgroup CPU consumption/throttling and per-GPU render/encoder activity. Stream FPS measures delivery, not game FPS. Compare at identical scene, resolution, and graphics settings; favor stable game frame times and low input latency over GPU utilization percentage alone.
+
+Live validation: the v5.6 package checksum and installation passed, and its bundled Visual C++ runtime installed successfully. Startup under the current Wine-GE 8 runner exits with code 3; emulator UI and gameplay are not verified working.
