@@ -8,7 +8,7 @@ html = r"""
     <span>🎮</span> 7BZ Dev Cloud Game
   </h2>
   <p style="color:#b0c4de;line-height:1.5">
-    Controller-first cloud game library with <b>Steam</b>, <b>Heroic</b>, <b>Legendary</b>, <b>Minigalaxy</b>, and <b>Lutris</b>.
+    Free remote build testing for indie developers. Open the HUD to check connection delay, frame delivery, and controller input.
   </p>
 
   <div style="background:#132238;padding:16px;border-radius:12px;margin:16px 0;border-left:4px solid #4dcdf2">
@@ -19,6 +19,7 @@ html = r"""
       <li>Open the 7BZ HUD and select <b>Audio Unmute</b> for Opus stereo audio.</li>
       <li>For FPS mouse look, use a normal Chrome or Edge tab and enable <b>Gaming Mode</b>; embedded viewers may block pointer lock.</li>
       <li>Set your local keyboard layout to English (EN), then use mouse, keyboard, or gamepad navigation.</li>
+      <li>Open <b>Connection diagnostics</b> in the HUD. Download a test report when comparing testers, networks, or builds.</li>
     </ol>
   </div>
 
@@ -34,7 +35,7 @@ html = r"""
       <li><b>User state:</b> Storefronts run as <code>gamer</code>; their temporary credentials and caches are under <code>/home/gamer</code>.</li>
       <li><b>Storefront EULA:</b> Valve's Subscriber Agreement is presented to the user directly in the Steam GUI on first launch.</li>
       <li><b>GPU path:</b> GPU 0 renders the direct NVIDIA Xorg desktop and games; GPU 1 encodes the unified 8080 stream with NVENC.</li>
-      <li><b>Custom Builds:</b> Upload test Linux builds into <code style="color:#4dcdf2">/tmp/game-builds</code> via Selkies Files panel.</li>
+      <li><b>Custom Builds:</b> Select complete Windows game folders using the Local Games browser; downloads go to /home/gamer/Downloads.</li>
     </ul>
   </div>
 </div>

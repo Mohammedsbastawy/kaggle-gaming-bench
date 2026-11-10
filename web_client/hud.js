@@ -40,18 +40,25 @@
       </div>
       <div class="seven-details is-collapsed">
         <div class="seven-card">
-          <div class="seven-card-title"><span>Live performance</span><span data-stat="transport">WebSocket</span></div>
+          <div class="seven-card-title"><span>Connection diagnostics</span><span data-stat="transport">WebSocket</span></div>
           <div class="seven-metrics">
             <div class="seven-metric"><strong data-stat="gpu0_metric">--</strong><small>🎮 GPU 0 Render</small></div>
             <div class="seven-metric"><strong data-stat="gpu1_metric">--</strong><small>📡 GPU 1 Stream</small></div>
             <div class="seven-metric"><strong data-stat="jitter">--</strong><small>RTT jitter</small></div>
             <div class="seven-metric"><strong data-stat="loss">--</strong><small>Frame loss</small></div>
             <div class="seven-metric"><strong data-stat="packet">N/A</strong><small>Packet loss</small></div>
+            <div class="seven-metric"><strong data-stat="encode">--</strong><small>Encode / frame</small></div>
+            <div class="seven-metric"><strong data-stat="decode">--</strong><small>Decode / frame</small></div>
+            <div class="seven-metric"><strong data-stat="buffer">--</strong><small>Video jitter buffer</small></div>
+            <div class="seven-metric"><strong data-stat="present">--</strong><small>Receive to display</small></div>
           </div>
+          <p data-stat="connection">Measuring connection…</p>
+          <small>RTT is round-trip network delay. Stream FPS is not game FPS. These figures do not measure total input delay.</small>
+          <button class="seven-button" data-action="report">Download test report</button>
         </div>
         <div class="seven-card">
           <div class="seven-optimize">
-            <div class="seven-optimize-copy"><b>Automatic stream quality</b><span data-stat="profile">1080p · 30 FPS · adaptive bitrate</span></div>
+            <div class="seven-optimize-copy"><b>Automatic stream quality</b><span data-stat="profile">1080p · 60 FPS target · adaptive bitrate</span></div>
             <span class="seven-live">AUTO</span>
           </div>
           <div class="seven-actions">
@@ -308,9 +315,35 @@
     } catch (_) {}
   }
 
+  function connectionAssessment(latest) {
+    const rtt = latest.rtt_ms;
+    if (typeof rtt !== "number" || !Number.isFinite(rtt) || rtt <= 0) return "Measuring connection…";
+    if (rtt >= 160) return "High network delay: useful for build and visual checks; reaction timing will feel delayed.";
+    if (rtt >= 80) return "Moderate network delay: test gameplay response before judging timing-sensitive controls.";
+    return "Lower network delay: a good candidate for gameplay tests; verify controls and frame pacing.";
+  }
+  function diagnosticReport() {
+    const latest = window.stream_stats?.latest || {};
+    const metrics = {};
+    for (const key of ["rtt_ms", "fps", "encoded_fps", "encode_ms", "pipeline_ms", "send_ms", "decode_ms", "jitter_buffer_ms", "present_ms", "audio_buffer_ms", "packet_loss_percent", "frames_not_shown", "video_mbps"]) {
+      if (typeof latest[key] === "number" && Number.isFinite(latest[key])) metrics[key] = latest[key];
+    }
+    return {created_at: new Date().toISOString(), transport: window.stream_client?.transport || window.__SELKIES_STREAMING_MODE__ || "unknown", metrics, assessment: connectionAssessment(latest), note: "Stream measurements; not game FPS or total input-to-display latency."};
+  }
+  function downloadReport() {
+    const url = URL.createObjectURL(new Blob([JSON.stringify(diagnosticReport(), null, 2)], {type: "application/json"}));
+    const link = document.createElement("a"); link.href = url; link.download = "7bz-connection-report.json";
+    document.body.appendChild(link); link.click(); link.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }
+
   function render() {
     const sample = current();
     const latest = sample.latest;
+    for (const [label, key] of [["encode", "encode_ms"], ["decode", "decode_ms"], ["buffer", "jitter_buffer_ms"], ["present", "present_ms"]]) {
+      stat(label, typeof latest[key] === "number" && Number.isFinite(latest[key]) ? `${latest[key].toFixed(1)} ms` : "N/A");
+    }
+    stat("connection", connectionAssessment(latest));
     stat("fps", sample.fps ? `${format(sample.fps)} FPS` : "--");
     stat("rtt", sample.rtt ? `${format(sample.rtt)} ms` : "--");
     stat("rate", sample.rate ? `${format(sample.rate, 1)} Mbps` : "--");
@@ -469,6 +502,7 @@
   hud.addEventListener("click", (event) => {
     const action = event.target.closest("[data-action]")?.dataset.action;
     if (!action) return;
+    if (action === "report") downloadReport();
     if (action === "hide") setHidden(true);
     if (action === "show") setHidden(false);
     if (action === "expand") toggleExpanded();
@@ -500,15 +534,6 @@
   document.addEventListener("pointerlockerror", () => toast("Mouse lock was blocked. Open this stream in Edge or Chrome."));
   window.addEventListener("message", (event) => {
     if (event.source !== window || event.origin !== window.location.origin) return;
-    if (event.data?.type === "serverSettings" && !state.qualityInitialized) {
-      // An earlier HUD saved 45 FPS and 4 Mbps in Selkies' browser storage.
-      // Reset the chosen ceiling once, after the dashboard restores its settings.
-      state.qualityInitialized = true;
-      setTimeout(() => post({ type: "settings", settings: {
-        rate_control_mode: "cbr", video_bitrate: 7000, framerate: 30,
-      } }), 1500);
-      return;
-    }
     if (event.data?.type !== "gamingModeUpdate") return;
     state.pointer = Boolean(event.data.active);
     button("pointer").classList.toggle("is-active", state.pointer);

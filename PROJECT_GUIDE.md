@@ -59,3 +59,13 @@ The Wine launcher preserves the stream's controller socket directory and sets up
 Fresh direct-Xorg boots now use 1080p/60 FPS WebRTC with NVENC, an 8 Mbps initial bitrate (6–12 Mbps range), congestion control, and 5 ms audio frames. `rtc_config.json` uses STUN only, avoiding the default public TURN relay. Live testing reported 190–210 ms RTT at 1080p, compared with over 250 ms on the earlier WebSocket session. These are observations for one connection, not a latency guarantee or measured input-to-display latency. The remaining delay is substantial.
 
 STUN-only WebRTC may fail on restrictive networks. Set `GAMELAB_TRANSPORT=websockets` before boot for the previous transport, or provide `SELKIES_RTC_CONFIG_JSON` containing suitable ICE servers. Keep TURN credentials outside Git. Transport switching remains enabled. The WebSocket fallback queue is one frame. The source change does not migrate or restart an active session.
+
+## Connection checks and indie build testing
+
+The expanded HUD separates network RTT, delivered stream FPS, encoding time, decoding time, receive-to-display time, and the WebRTC video jitter buffer. Missing metrics read N/A rather than zero. RTT guidance uses approximate 80 ms and 160 ms boundaries; these are practical labels, not quality guarantees or measurements of total input delay. Download test report exports only selected performance numbers and the transport, with no URL, IP address, credentials, or notebook token.
+
+For a build test, record the build, scene, tester country, network type, and controller in your own notes. Warm up the same scene, exercise mouse look and controller buttons/sticks, reconnect the controller during play, and export a report. Compare the same scene and graphics settings on a second connection, ideally from a tester nearer the allocated GPU region. This second-person regional comparison remains unperformed; do not claim it passed. Our one-session observations were over 250 ms on the earlier proxy stream and roughly 190–210 ms on direct WebRTC at restored 1080p60 settings. Preliminary community-relay probes did not identify an under-80-ms route; WARP's HTTP comparison did not improve the route.
+
+Use the environment to validate build startup, assets, menus, save/load, and input mapping. Judge reaction timing only after checking connection delay. Changing DNS does not shorten an established media route. Free software does not guarantee free relay infrastructure or low RTT from every country.
+
+The HUD no longer overwrites the stream with a delayed hard-coded 30 FPS / 7 Mbps settings message after loading: startup settings and Selkies controls govern quality.
